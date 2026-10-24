@@ -37,7 +37,18 @@ fun LobbyScreen(
     onAutoBalanceRoles: () -> Unit,
     onLeaveLobbyClick: () -> Unit
 ) {
-    val session = state.session ?: return
+    val session = state.session
+    if (session == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(color = AppleAccentBlue)
+        }
+        return
+    }
 
     Scaffold(
         topBar = {

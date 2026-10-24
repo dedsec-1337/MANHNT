@@ -132,8 +132,9 @@ class MainActivity : ComponentActivity() {
                                         isShrinkingZoneEnabled = shrinking,
                                         autoPingIntervalMinutes = autoPing,
                                         safeZones = safeZones
-                                    )
-                                    currentScreen = Screen.LOBBY
+                                    ) { success ->
+                                        if (success) currentScreen = Screen.LOBBY
+                                    }
                                 }
                             )
 

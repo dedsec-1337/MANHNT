@@ -95,7 +95,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun createRoom(roomName: String, durationMinutes: Int, zoneSizePreset: String = "1000m", headStartMinutes: Int = 0, isShrinkingZoneEnabled: Boolean = false, autoPingIntervalMinutes: Int = 0, safeZones: List<SafeZone> = emptyList(), centerLat: Double = 0.0, centerLng: Double = 0.0) {
+    fun createRoom(roomName: String, durationMinutes: Int, zoneSizePreset: String = "1000m", headStartMinutes: Int = 0, isShrinkingZoneEnabled: Boolean = false, autoPingIntervalMinutes: Int = 0, safeZones: List<SafeZone> = emptyList(), centerLat: Double = 0.0, centerLng: Double = 0.0, onComplete: (Boolean) -> Unit = {}) {
         val joinCode = RandomCode.generateCode(6)
         val host = _uiState.value.myPlayer.copy(role = Role.SEEKER, latitude = centerLat, longitude = centerLng)
         val radius = when (zoneSizePreset) { "2000m" -> 2000.0; "UNLIMITED" -> 50000.0; else -> 1000.0 }
@@ -103,6 +103,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (firebaseSync.createRoom(RoomNetworkModel(session = session, players = mapOf(host.id to host)))) {
                 _uiState.update { it.copy(session = session, myPlayer = host, players = listOf(host), isOrganizer = true, toastMessage = "Room $joinCode") }
+                onComplete(true)
+            } else {
+                _uiState.update { it.copy(toastMessage = "Couldn't create room. Check your connection and Firebase database rules.") }
+                onComplete(false)
             }
         }
     }
@@ -116,8 +120,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (firebaseSync.joinPlayer(upper, me)) {
                     _uiState.update { it.copy(session = room.session, players = room.players.values.toList(), myPlayer = me, isOrganizer = room.session.hostPlayerId == me.id) }
                     onComplete(true)
-                } else onComplete(false)
-            } else onComplete(false)
+                } else {
+                    _uiState.update { it.copy(toastMessage = "Couldn't join room. Check your connection and Firebase database rules.") }
+                    onComplete(false)
+                }
+            } else {
+                _uiState.update { it.copy(toastMessage = "Room $upper not found or unreachable") }
+                onComplete(false)
+            }
         }
     }
 
