@@ -21,6 +21,7 @@ import com.manhunt.app.ui.components.ApplePrimaryButton
 import com.manhunt.app.ui.theme.AppleAccentBlue
 import com.manhunt.app.ui.theme.AppleTextPrimary
 import com.manhunt.app.ui.theme.AppleTextSecondary
+import com.manhunt.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,9 +108,9 @@ fun CreateRoomScreen(
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = AppleAccentBlue,
-                        unfocusedBorderColor = Color(0xFFE5E5EA),
-                        focusedContainerColor = Color(0xFFF8F9FA),
-                        unfocusedContainerColor = Color(0xFFF8F9FA)
+                        unfocusedBorderColor = AppleDivider,
+                        focusedContainerColor = AppleInputBackground,
+                        unfocusedContainerColor = AppleInputBackground
                     )
                 )
             }

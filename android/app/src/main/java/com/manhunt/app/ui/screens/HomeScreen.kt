@@ -26,6 +26,7 @@ import com.manhunt.app.ui.theme.AppleCardBackground
 import com.manhunt.app.ui.theme.AppleTextPrimary
 import com.manhunt.app.ui.theme.AppleTextSecondary
 import com.manhunt.app.viewmodel.GameUiState
+import com.manhunt.app.ui.theme.*
 
 @Composable
 fun HomeScreen(
@@ -165,9 +166,9 @@ fun HomeScreen(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = AppleAccentBlue,
-                            unfocusedBorderColor = Color(0xFFE5E5EA),
-                            focusedContainerColor = Color(0xFFF8F9FA),
-                            unfocusedContainerColor = Color(0xFFF8F9FA)
+                            unfocusedBorderColor = AppleDivider,
+                            focusedContainerColor = AppleInputBackground,
+                            unfocusedContainerColor = AppleInputBackground
                         )
                     )
 

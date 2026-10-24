@@ -20,6 +20,7 @@ import com.manhunt.app.ui.theme.AppleCardBackground
 import com.manhunt.app.ui.theme.AppleSeekerOrange
 import com.manhunt.app.ui.theme.AppleTextPrimary
 import com.manhunt.app.ui.theme.AppleTextSecondary
+import com.manhunt.app.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,7 +71,7 @@ fun CatchBottomSheet(
                         modifier = Modifier
                             .size(56.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF2F2F7)),
+                            .background(AppleFill),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -126,7 +127,7 @@ fun CatchBottomSheet(
                                             else -> if (code.length < 4) code += key
                                         }
                                     },
-                                color = Color(0xFFF2F2F7),
+                                color = AppleFill,
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {

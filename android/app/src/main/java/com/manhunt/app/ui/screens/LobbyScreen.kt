@@ -261,7 +261,7 @@ fun LobbyScreen(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFFF2F2F7)),
+                                    .background(AppleFill),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(text = player.avatarEmoji, fontSize = 20.sp)

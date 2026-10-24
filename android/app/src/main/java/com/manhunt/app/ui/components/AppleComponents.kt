@@ -89,7 +89,7 @@ fun AppleSecondaryButton(
             .fillMaxWidth()
             .height(52.dp),
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFF2F2F7)
+        color = AppleFill
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
@@ -110,7 +110,7 @@ fun AppleChip(
     onSelect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg = if (isSelected) AppleAccentBlue else Color(0xFFF2F2F7)
+    val bg = if (isSelected) AppleAccentBlue else AppleFill
     val textColor = if (isSelected) Color.White else AppleTextPrimary
 
     Surface(

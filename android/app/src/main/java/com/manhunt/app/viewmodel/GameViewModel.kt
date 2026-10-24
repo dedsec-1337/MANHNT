@@ -184,8 +184,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (me.stealthCooldownUntilEpochMs > now) { _uiState.update { it.copy(toastMessage = "Cooldown") }; return }
         viewModelScope.launch {
             val until = now + Constants.STEALTH_DURATION_SECONDS * 1000L
-            val updated = me.copy(isStealthActive = true, stealthUntilEpochMs = until, stealthCooldownUntilEpochMs = until + Constants.STEALTH_COOLDOWN_SECONDS * 1000L)
-            firebaseSync.joinPlayer(s.joinCode, updated)
+            val cooldownUntil = until + Constants.STEALTH_COOLDOWN_SECONDS * 1000L
+            val updated = me.copy(isStealthActive = true, stealthUntilEpochMs = until, stealthCooldownUntilEpochMs = cooldownUntil)
+            firebaseSync.patchPlayer(s.joinCode, me.id, mapOf("isStealthActive" to true, "stealthUntilEpochMs" to until, "stealthCooldownUntilEpochMs" to cooldownUntil))
             hapticManager.triggerPowerUp()
             _uiState.update { it.copy(myPlayer = updated, isStealthActive = true, toastMessage = "Stealth ${Constants.STEALTH_DURATION_SECONDS}s") }
         }
@@ -206,7 +207,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val current = _uiState.value.session ?: return@launch
                 val pos = _uiState.value.myPlayer
                 val outsideJail = GeoUtils.distanceMeters(pos.latitude, pos.longitude, current.jailLat, current.jailLng) > current.jailRadiusMeters
-                if (current.isPaused || outsideJail || pos.isCaught || pos.isInJail) {
+                if (current.status != GameStatus.RUNNING || current.isPaused || outsideJail || pos.isCaught || pos.isInJail) {
                     resetJailbreak(current.joinCode)
                     _uiState.update { it.copy(toastMessage = "Jailbreak interrupted") }
                     return@launch
@@ -232,7 +233,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (me.isStealthActive && !active) {
             val updated = me.copy(isStealthActive = false)
             _uiState.update { it.copy(myPlayer = updated) }
-            state.session?.let { s -> viewModelScope.launch { firebaseSync.joinPlayer(s.joinCode, updated) } }
+            state.session?.let { s -> viewModelScope.launch { firebaseSync.patchPlayer(s.joinCode, me.id, mapOf("isStealthActive" to false)) } }
         }
         if (active != state.isStealthActive || cooldown != state.stealthCooldownSeconds) {
             _uiState.update { it.copy(isStealthActive = active, stealthCooldownSeconds = cooldown) }
@@ -241,6 +242,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun completeJailbreak() {
         val s = _uiState.value.session ?: return
+        if (s.status != GameStatus.RUNNING) return
         val immunity = System.currentTimeMillis() + Constants.POST_JAILBREAK_IMMUNITY_SECONDS * 1000L
         viewModelScope.launch {
             _uiState.value.players.filter { it.role == Role.HIDER && it.isInJail }.forEach { p ->

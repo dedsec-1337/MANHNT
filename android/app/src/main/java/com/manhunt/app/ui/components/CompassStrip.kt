@@ -27,6 +27,7 @@ import com.manhunt.app.ui.theme.AppleSeekerOrange
 import com.manhunt.app.ui.theme.AppleTextPrimary
 import com.manhunt.app.ui.theme.AppleTextSecondary
 import com.manhunt.app.util.GeoUtils
+import com.manhunt.app.ui.theme.*
 
 @Composable
 fun CompassStrip(
@@ -96,7 +97,7 @@ fun CompassStrip(
 
             // Proximity indicator pill
             val isDanger = distanceMeters in 1.0..30.0
-            val pillBg = if (isDanger) Color(0xFFFFE5E5) else Color(0xFFF2F2F7)
+            val pillBg = if (isDanger) AppleDangerRed.copy(alpha = 0.18f) else AppleFill
             val pillText = if (isDanger) Color(0xFFFF3B30) else AppleTextSecondary
             val pillLabel = when {
                 distanceMeters <= 0.0 -> "Waiting"
