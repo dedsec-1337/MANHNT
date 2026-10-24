@@ -18,6 +18,12 @@ val AppleTextPrimaryDark = Color(0xFFF5F5F7)
 val AppleTextSecondaryDark = Color(0xFF98989D)
 val AppleDividerDark = Color(0xFF2C2C2E)
 
+// Default (light) aliases used across screens/components
+val AppleTextPrimary = AppleTextPrimaryLight
+val AppleTextSecondary = AppleTextSecondaryLight
+val AppleCardBackground = AppleCardBackgroundLight
+val AppleDivider = AppleDividerLight
+
 // Shared Accents
 val AppleAccentBlue = Color(0xFF007AFF)
 val AppleAccentBlueDark = Color(0xFF0A84FF)

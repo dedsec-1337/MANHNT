@@ -158,7 +158,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val dist = GeoUtils.distanceMeters(me.latitude, me.longitude, target.latitude, target.longitude)
         if (dist > Constants.CATCH_PROXIMITY_METERS) { onResult(false, "Too far ${dist.toInt()}m"); return }
         val s = _uiState.value.session ?: return
-        viewModelScope.launch { firebaseSync.submitCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim())) }
+        viewModelScope.launch { firebaseSync.sendCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim())) }
         if (target.catchCode.trim() == enteredCode.trim()) {
             hapticManager.triggerCatchConfirmation()
             viewModelScope.launch {
@@ -318,7 +318,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val catches = _uiState.value.players.count { it.role == Role.HIDER && it.isCaught }
         viewModelScope.launch {
             firebaseSync.updateSession(s.joinCode, mapOf("status" to GameStatus.FINISHED.name, "winnerRole" to winner.name, "totalCatches" to catches))
-            db.matchHistoryDao().insertMatch(MatchHistoryEntity(roomId = s.roomId, roomName = s.roomName, role = _uiState.value.myPlayer.role.name, durationSeconds = (s.durationMinutes * 60) - s.remainingSeconds, catches = catches, didWin = _uiState.value.myPlayer.role == winner))
+            db.matchHistoryDao().insertMatch(MatchHistoryEntity(joinCode = s.joinCode, rolePlayed = _uiState.value.myPlayer.role.name, isWin = _uiState.value.myPlayer.role == winner, durationSeconds = (s.durationMinutes * 60) - s.remainingSeconds, catchesCount = catches))
         }
     }
 
