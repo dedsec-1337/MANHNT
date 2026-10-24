@@ -26,6 +26,7 @@ import com.manhunt.app.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateRoomScreen(
+    isCreatingRoom: Boolean = false,
     onBackClick: () -> Unit,
     onCreateRoomSubmit: (
         roomName: String,
@@ -327,8 +328,8 @@ fun CreateRoomScreen(
 
             // Create Button
             ApplePrimaryButton(
-                text = "Create Room & Open Lobby",
-                enabled = roomName.isNotBlank(),
+                text = if (isCreatingRoom) "Creating Room..." else "Create Room & Open Lobby",
+                enabled = roomName.isNotBlank() && !isCreatingRoom,
                 onClick = {
                     val safeZonesList = if (enableSafeZones) {
                         listOf(

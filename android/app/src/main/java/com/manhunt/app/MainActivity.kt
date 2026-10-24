@@ -122,6 +122,7 @@ class MainActivity : ComponentActivity() {
                             )
 
                             Screen.CREATE_ROOM -> CreateRoomScreen(
+                                isCreatingRoom = uiState.isCreatingRoom,
                                 onBackClick = { currentScreen = Screen.HOME },
                                 onCreateRoomSubmit = { name, duration, zonePreset, headStart, shrinking, autoPing, safeZones ->
                                     viewModel.createRoom(
@@ -132,8 +133,9 @@ class MainActivity : ComponentActivity() {
                                         isShrinkingZoneEnabled = shrinking,
                                         autoPingIntervalMinutes = autoPing,
                                         safeZones = safeZones
-                                    )
-                                    currentScreen = Screen.LOBBY
+                                    ) { success ->
+                                        if (success) currentScreen = Screen.LOBBY
+                                    }
                                 }
                             )
 
