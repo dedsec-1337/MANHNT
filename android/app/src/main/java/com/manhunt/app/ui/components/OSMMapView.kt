@@ -29,6 +29,10 @@ fun OSMMapView(
     safeZones: List<SafeZone> = emptyList(),
     isAutoPingActive: Boolean = false,
     otherPlayers: List<Player>,
+    jailLat: Double = 0.0,
+    jailLng: Double = 0.0,
+    jailRadiusMeters: Double = 25.0,
+    jailEnabled: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -57,11 +61,8 @@ fun OSMMapView(
         update = { mapView ->
             mapView.overlays.clear()
 
-            // 1. Draw Play Zone Geofence Circle Boundary & Warning Buffer (Skipped if Unlimited)
             if (!isUnlimitedZone && zoneRadiusMeters > 0 && zoneCenterLat != 0.0) {
                 val circleCenter = GeoPoint(zoneCenterLat, zoneCenterLng)
-
-                // Main Geofence Boundary
                 val circlePolygon = Polygon(mapView).apply {
                     points = Polygon.pointsAsCircle(circleCenter, zoneRadiusMeters)
                     fillPaint.color = AndroidColor.argb(25, 0, 122, 255)
@@ -72,8 +73,6 @@ fun OSMMapView(
                     title = "Play Zone Perimeter (${zoneRadiusMeters.toInt()}m)"
                 }
                 mapView.overlays.add(circlePolygon)
-
-                // 25m Warning Buffer Ring (inner perimeter)
                 if (zoneRadiusMeters > 50) {
                     val bufferPolygon = Polygon(mapView).apply {
                         points = Polygon.pointsAsCircle(circleCenter, zoneRadiusMeters - 25.0)
@@ -86,7 +85,6 @@ fun OSMMapView(
                 }
             }
 
-            // 2. Draw Safe Zones (Green Circles with Shielded Bases)
             for (safeZone in safeZones) {
                 if (safeZone.latitude != 0.0 && safeZone.longitude != 0.0) {
                     val safeCenter = GeoPoint(safeZone.latitude, safeZone.longitude)
@@ -103,7 +101,20 @@ fun OSMMapView(
                 }
             }
 
-            // 3. Draw Current Player Marker (Blue dot)
+            if (jailEnabled && jailLat != 0.0 && jailLng != 0.0) {
+                val jailCenter = GeoPoint(jailLat, jailLng)
+                val jailPolygon = Polygon(mapView).apply {
+                    points = Polygon.pointsAsCircle(jailCenter, jailRadiusMeters)
+                    fillPaint.color = AndroidColor.argb(55, 255, 59, 48)
+                    fillPaint.style = Paint.Style.FILL
+                    outlinePaint.color = AndroidColor.argb(230, 255, 59, 48)
+                    outlinePaint.strokeWidth = 5f
+                    outlinePaint.style = Paint.Style.STROKE
+                    title = "🔒 Jail"
+                }
+                mapView.overlays.add(jailPolygon)
+            }
+
             if (playerLat != 0.0 && playerLng != 0.0) {
                 val selfMarker = Marker(mapView).apply {
                     position = GeoPoint(playerLat, playerLng)
@@ -114,19 +125,37 @@ fun OSMMapView(
                 mapView.overlays.add(selfMarker)
             }
 
-            // 4. For Seekers (or during Auto-Ping reveal): show Hiders
-            // For Hiders: Stealth map (Seekers hidden from map, only rotary compass points to nearest)
             if (userRole == Role.SEEKER || isAutoPingActive) {
-                val hiders = otherPlayers.filter { it.role == Role.HIDER && !it.isCaught }
+                val hiders = otherPlayers.filter {
+                    it.role == Role.HIDER && !it.isCaught && !it.isStealthActive
+                }
                 for (hider in hiders) {
                     if (hider.latitude != 0.0 && hider.longitude != 0.0) {
                         val hiderMarker = Marker(mapView).apply {
                             position = GeoPoint(hider.latitude, hider.longitude)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                            title = if (hider.isInSafeZone) "${hider.name} 🛡️ (Safe in ${hider.safeZoneName ?: "Base"})" else "${hider.name} (Hider)"
-                            icon = context.getDrawable(if (hider.isInSafeZone) android.R.drawable.presence_invisible else android.R.drawable.presence_away)
+                            title = when {
+                                hider.isInSafeZone -> "${hider.name} 🛡️ (Safe)"
+                                else -> "${hider.name} (Hider)"
+                            }
+                            icon = context.getDrawable(
+                                if (hider.isInSafeZone) android.R.drawable.presence_invisible
+                                else android.R.drawable.presence_away
+                            )
                         }
                         mapView.overlays.add(hiderMarker)
+                    }
+                }
+                val jailed = otherPlayers.filter { it.role == Role.HIDER && it.isInJail }
+                for (j in jailed) {
+                    if (j.latitude != 0.0 && j.longitude != 0.0) {
+                        val m = Marker(mapView).apply {
+                            position = GeoPoint(j.latitude, j.longitude)
+                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                            title = "${j.name} 🔒 Jail"
+                            icon = context.getDrawable(android.R.drawable.ic_lock_lock)
+                        }
+                        mapView.overlays.add(m)
                     }
                 }
             }
