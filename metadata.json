@@ -1,0 +1,6 @@
+{
+  "name": "Manhunt - Native Android GPS Chase Game",
+  "description": "Premium native Android GPS chase game built with Kotlin, Jetpack Compose, OSMDroid, Room, and P2P Wi-Fi/Hotspot networking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

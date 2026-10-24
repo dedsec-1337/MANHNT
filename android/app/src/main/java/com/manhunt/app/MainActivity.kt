@@ -1,0 +1,206 @@
+package com.manhunt.app
+
+import android.Manifest
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.viewModels
+import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.core.view.WindowCompat
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.manhunt.app.data.model.GameStatus
+import com.manhunt.app.service.ManhuntLocationService
+import com.manhunt.app.ui.screens.*
+import com.manhunt.app.ui.theme.ManhuntTheme
+import com.manhunt.app.viewmodel.GameViewModel
+
+enum class Screen {
+    HOME,
+    CREATE_ROOM,
+    LOBBY,
+    GAME,
+    RESULTS,
+    PROFILE
+}
+
+class MainActivity : ComponentActivity() {
+
+    private val viewModel: GameViewModel by viewModels()
+
+    @OptIn(ExperimentalPermissionsApi::class)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        setContent {
+            ManhuntTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    val uiState by viewModel.uiState.collectAsState()
+                    var currentScreen by remember { mutableStateOf(Screen.HOME) }
+
+                    // Runtime Permissions with Accompanist
+                    val permissionsList = remember {
+                        buildList {
+                            add(Manifest.permission.ACCESS_FINE_LOCATION)
+                            add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                add(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        }
+                    }
+
+                    val permissionsState = rememberMultiplePermissionsState(permissions = permissionsList)
+
+                    LaunchedEffect(Unit) {
+                        if (!permissionsState.allPermissionsGranted) {
+                            permissionsState.launchMultiplePermissionRequest()
+                        }
+                        // Check battery optimization intent
+                        ManhuntLocationService.createBatteryOptimizationIntent(this@MainActivity)?.let { intent ->
+                            try {
+                                startActivity(intent)
+                            } catch (ignored: Exception) {}
+                        }
+                    }
+
+                    // React to game session status changes
+                    LaunchedEffect(uiState.session?.status) {
+                        when (uiState.session?.status) {
+                            GameStatus.LOBBY -> currentScreen = Screen.LOBBY
+                            GameStatus.RUNNING, GameStatus.PAUSED -> {
+                                currentScreen = Screen.GAME
+                                startLocationService(
+                                    remainingSeconds = uiState.session?.remainingSeconds ?: 1800,
+                                    zoneLat = uiState.session?.zoneCenterLat ?: 0.0,
+                                    zoneLng = uiState.session?.zoneCenterLng ?: 0.0,
+                                    zoneRadius = uiState.session?.zoneRadiusMeters ?: 500.0
+                                )
+                            }
+                            GameStatus.FINISHED -> {
+                                currentScreen = Screen.RESULTS
+                                stopLocationService()
+                            }
+                            null -> {
+                                if (currentScreen != Screen.PROFILE && currentScreen != Screen.CREATE_ROOM) {
+                                    currentScreen = Screen.HOME
+                                }
+                                stopLocationService()
+                            }
+                        }
+                    }
+
+                    // Display toasts
+                    LaunchedEffect(uiState.toastMessage) {
+                        uiState.toastMessage?.let {
+                            Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
+                            viewModel.dismissToast()
+                        }
+                    }
+
+                    Crossfade(targetState = currentScreen, label = "screenTransition") { screen ->
+                        when (screen) {
+                            Screen.HOME -> HomeScreen(
+                                state = uiState,
+                                onCreateRoomClick = { currentScreen = Screen.CREATE_ROOM },
+                                onJoinRoomClick = { code, hostIp ->
+                                    viewModel.joinRoom(code, hostIp)
+                                },
+                                onEditProfileClick = { currentScreen = Screen.PROFILE }
+                            )
+
+                            Screen.CREATE_ROOM -> CreateRoomScreen(
+                                onBackClick = { currentScreen = Screen.HOME },
+                                onCreateRoomSubmit = { name, duration, radius, ratio ->
+                                    viewModel.createRoom(
+                                        roomName = name,
+                                        durationMinutes = duration,
+                                        zoneRadiusMeters = radius,
+                                        hiderRatio = ratio
+                                    )
+                                    currentScreen = Screen.LOBBY
+                                }
+                            )
+
+                            Screen.LOBBY -> LobbyScreen(
+                                state = uiState,
+                                onStartGameClick = { viewModel.startGame() },
+                                onToggleRole = { playerId -> viewModel.togglePlayerRole(playerId) },
+                                onAutoBalanceRoles = { viewModel.autoAssignRoles() },
+                                onLeaveLobbyClick = {
+                                    viewModel.leaveGame()
+                                    currentScreen = Screen.HOME
+                                }
+                            )
+
+                            Screen.GAME -> GameScreen(
+                                state = uiState,
+                                onToggleSafetyPause = { viewModel.toggleSafetyPause() },
+                                onAttemptCatch = { targetHiderId, code ->
+                                    viewModel.attemptCatch(targetHiderId, code)
+                                },
+                                onLeaveGame = {
+                                    viewModel.leaveGame()
+                                    stopLocationService()
+                                    currentScreen = Screen.HOME
+                                }
+                            )
+
+                            Screen.RESULTS -> ResultsScreen(
+                                state = uiState,
+                                onBackToHome = {
+                                    viewModel.leaveGame()
+                                    currentScreen = Screen.HOME
+                                }
+                            )
+
+                            Screen.PROFILE -> ProfileScreen(
+                                state = uiState,
+                                onSaveProfile = { name, emoji -> viewModel.updateProfile(name, emoji) },
+                                onClose = { currentScreen = Screen.HOME }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun startLocationService(
+        remainingSeconds: Int,
+        zoneLat: Double,
+        zoneLng: Double,
+        zoneRadius: Double
+    ) {
+        val intent = Intent(this, ManhuntLocationService::class.java).apply {
+            action = ManhuntLocationService.ACTION_START
+            putExtra(ManhuntLocationService.EXTRA_REMAINING_SECONDS, remainingSeconds)
+            putExtra(ManhuntLocationService.EXTRA_ZONE_LAT, zoneLat)
+            putExtra(ManhuntLocationService.EXTRA_ZONE_LNG, zoneLng)
+            putExtra(ManhuntLocationService.EXTRA_ZONE_RADIUS, zoneRadius)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+    }
+
+    private fun stopLocationService() {
+        val intent = Intent(this, ManhuntLocationService::class.java).apply {
+            action = ManhuntLocationService.ACTION_STOP
+        }
+        startService(intent)
+    }
+}

@@ -1,0 +1,7 @@
+<resources>
+    <color name="apple_background">#F8F9FA</color>
+    <color name="apple_surface">#FFFFFF</color>
+    <color name="apple_accent">#007AFF</color>
+    <color name="apple_text_primary">#1C1C1E</color>
+    <color name="apple_text_secondary">#8E8E93</color>
+</resources>

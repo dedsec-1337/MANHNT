@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.Manhunt" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/apple_background</item>
+        <item name="android:navigationBarColor">@color/apple_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
