@@ -51,7 +51,6 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
 
-                    // Runtime Permissions with Accompanist
                     val permissionsList = remember {
                         buildList {
                             add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -75,7 +74,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // React to game session status changes
                     LaunchedEffect(uiState.session?.status) {
                         when (uiState.session?.status) {
                             GameStatus.LOBBY -> currentScreen = Screen.LOBBY
@@ -103,7 +101,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // Display toasts
                     LaunchedEffect(uiState.toastMessage) {
                         uiState.toastMessage?.let {
                             Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
@@ -155,8 +152,10 @@ class MainActivity : ComponentActivity() {
                                 state = uiState,
                                 onToggleSafetyPause = { viewModel.toggleSafetyPause() },
                                 onAttemptCatch = { targetHiderId, code ->
-                                    viewModel.attemptCatch(targetHiderId, code)
+                                    viewModel.attemptCatch(targetHiderId, code) { _, _ -> }
                                 },
+                                onActivateStealth = { viewModel.activateStealth() },
+                                onStartJailbreak = { viewModel.startJailbreakHold() },
                                 onLeaveGame = {
                                     viewModel.leaveGame()
                                     stopLocationService()
