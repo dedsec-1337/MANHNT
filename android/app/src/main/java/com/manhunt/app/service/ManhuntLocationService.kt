@@ -16,6 +16,8 @@ import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.*
 import com.manhunt.app.MainActivity
 import com.manhunt.app.R
+import com.manhunt.app.data.Constants
+import com.manhunt.app.network.FirebaseSyncService
 import com.manhunt.app.util.GeoUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -32,6 +34,8 @@ class ManhuntLocationService : Service() {
     private var zoneCenterLat = 0.0
     private var zoneCenterLng = 0.0
     private var zoneRadiusMeters = 500.0
+    private var joinCode = ""
+    private var playerId = ""
 
     override fun onCreate() {
         super.onCreate()
@@ -59,6 +63,8 @@ class ManhuntLocationService : Service() {
         zoneCenterLat = intent?.getDoubleExtra(EXTRA_ZONE_LAT, 0.0) ?: 0.0
         zoneCenterLng = intent?.getDoubleExtra(EXTRA_ZONE_LNG, 0.0) ?: 0.0
         zoneRadiusMeters = intent?.getDoubleExtra(EXTRA_ZONE_RADIUS, 500.0) ?: 500.0
+        joinCode = intent?.getStringExtra(EXTRA_JOIN_CODE) ?: ""
+        playerId = intent?.getStringExtra(EXTRA_PLAYER_ID) ?: ""
 
         val notification = buildOngoingNotification(remainingSeconds)
 
@@ -82,10 +88,10 @@ class ManhuntLocationService : Service() {
     private fun startLocationTracking() {
         val request = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
-            LOCATION_INTERVAL_MS
+            Constants.LOCATION_UPDATE_INTERVAL_MS
         ).apply {
-            setMinUpdateIntervalMillis(3000)
-            setMaxUpdateDelayMillis(6000)
+            setMinUpdateIntervalMillis(Constants.FASTEST_LOCATION_INTERVAL_MS)
+            setMaxUpdateDelayMillis(Constants.LOCATION_UPDATE_INTERVAL_MS + 1000)
         }.build()
 
         fusedLocationClient.requestLocationUpdates(
@@ -108,12 +114,24 @@ class ManhuntLocationService : Service() {
 
         isOutOfZone = outOfBounds
 
+        // Emit to local UI ViewModel
         serviceScope.launch {
             _locationUpdates.emit(location)
         }
 
+        // PUSH TO CLOUD FIREBASE REST EVERY 5s (even when app is backgrounded/screen off)
+        if (joinCode.isNotEmpty() && playerId.isNotEmpty()) {
+            FirebaseSyncService.pushLocationUpdate(
+                joinCode = joinCode,
+                playerId = playerId,
+                lat = location.latitude,
+                lng = location.longitude,
+                isOutOfZone = outOfBounds
+            )
+        }
+
         if (outOfBounds) {
-            updateNotification("WARNING: You are outside the play zone boundary!")
+            updateNotification("WARNING: Out of boundary! Return immediately.")
         }
     }
 
@@ -136,7 +154,7 @@ class ManhuntLocationService : Service() {
         val contentText = if (isOutOfZone) {
             "OUT OF ZONE! Return immediately ($timeString remaining)"
         } else {
-            "Manhunt is running — $timeString remaining"
+            "Cellular GPS active — $timeString remaining"
         }
 
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
@@ -150,7 +168,7 @@ class ManhuntLocationService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Manhunt GPS Active")
+            .setContentTitle("Manhunt Cloud Tracking Active")
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)
@@ -163,7 +181,7 @@ class ManhuntLocationService : Service() {
     private fun updateNotification(alertText: String) {
         val manager = getSystemService(NotificationManager::class.java)
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Manhunt Alert")
+            .setContentTitle("Manhunt Boundary Warning")
             .setContentText(alertText)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setOngoing(true)
@@ -198,7 +216,6 @@ class ManhuntLocationService : Service() {
     companion object {
         const val CHANNEL_ID = "manhunt_chase_service"
         const val NOTIFICATION_ID = 4242
-        const val LOCATION_INTERVAL_MS = 5000L
 
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
@@ -207,13 +224,12 @@ class ManhuntLocationService : Service() {
         const val EXTRA_ZONE_LAT = "EXTRA_ZONE_LAT"
         const val EXTRA_ZONE_LNG = "EXTRA_ZONE_LNG"
         const val EXTRA_ZONE_RADIUS = "EXTRA_ZONE_RADIUS"
+        const val EXTRA_JOIN_CODE = "EXTRA_JOIN_CODE"
+        const val EXTRA_PLAYER_ID = "EXTRA_PLAYER_ID"
 
         private val _locationUpdates = MutableSharedFlow<Location>(extraBufferCapacity = 32)
         val locationUpdates = _locationUpdates.asSharedFlow()
 
-        /**
-         * Intent to request disabling battery optimization (vital for Samsung/Xiaomi/Oppo).
-         */
         @SuppressLint("BatteryLife")
         fun createBatteryOptimizationIntent(context: Context): Intent? {
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager

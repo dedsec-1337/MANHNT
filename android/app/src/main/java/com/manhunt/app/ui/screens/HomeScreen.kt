@@ -1,16 +1,14 @@
 package com.manhunt.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.manhunt.app.data.model.NetworkSyncStatus
 import com.manhunt.app.ui.components.AppleCard
 import com.manhunt.app.ui.components.ApplePrimaryButton
 import com.manhunt.app.ui.theme.AppleAccentBlue
@@ -31,7 +30,7 @@ import com.manhunt.app.viewmodel.GameUiState
 fun HomeScreen(
     state: GameUiState,
     onCreateRoomClick: () -> Unit,
-    onJoinRoomClick: (code: String, hostIp: String?) -> Unit,
+    onJoinRoomClick: (code: String) -> Unit,
     onEditProfileClick: () -> Unit
 ) {
     var inputCode by remember { mutableStateOf("") }
@@ -62,11 +61,23 @@ fun HomeScreen(
                             letterSpacing = (-0.5).sp,
                             color = AppleTextPrimary
                         )
-                        Text(
-                            text = "Local GPS Chase Game",
-                            fontSize = 14.sp,
-                            color = AppleTextSecondary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SignalCellularAlt,
+                                contentDescription = null,
+                                tint = AppleAccentBlue,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Long-Range Cellular GPS Chase",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = AppleTextSecondary
+                            )
+                        }
                     }
 
                     // Profile Chip
@@ -92,7 +103,42 @@ fun HomeScreen(
                 }
             }
 
-            // Quick Join Code Card
+            // Cellular Data Advantage Banner
+            item {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = AppleAccentBlue.copy(alpha = 0.08f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = null,
+                            tint = AppleAccentBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "City-Wide Cellular Tracking",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppleAccentBlue
+                            )
+                            Text(
+                                text = "Powered by Firebase Realtime REST API. Spread out across parks and miles with 5G/4G/LTE.",
+                                fontSize = 11.sp,
+                                color = AppleTextSecondary
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Join with Code Card
             item {
                 AppleCard {
                     Text(
@@ -103,7 +149,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Enter the 6-character code from the organizer.",
+                        text = "Enter the 6-character code created by the match organizer.",
                         fontSize = 13.sp,
                         color = AppleTextSecondary
                     )
@@ -127,9 +173,9 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     ApplePrimaryButton(
-                        text = "Join Chase",
-                        enabled = inputCode.length >= 4,
-                        onClick = { onJoinRoomClick(inputCode, null) }
+                        text = if (state.isJoiningRoom) "Connecting to Cloud..." else "Join Chase",
+                        enabled = inputCode.length >= 4 && !state.isJoiningRoom,
+                        onClick = { onJoinRoomClick(inputCode) }
                     )
                 }
             }
@@ -151,7 +197,7 @@ fun HomeScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Set play zone boundary, timer, and invite nearby friends.",
+                                text = "Set play zone boundary, timer, and generate a 6-character cloud room code.",
                                 fontSize = 13.sp,
                                 color = AppleTextSecondary
                             )
@@ -178,114 +224,6 @@ fun HomeScreen(
                         text = "Create Room",
                         onClick = onCreateRoomClick
                     )
-                }
-            }
-
-            // Discovered Nearby Rooms (UDP Local Discovery)
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Wifi,
-                            contentDescription = "Nearby",
-                            tint = AppleAccentBlue,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "Nearby Rooms (Local Wi-Fi)",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AppleTextPrimary
-                        )
-                    }
-
-                    Text(
-                        text = "${state.discoveredRooms.size} found",
-                        fontSize = 12.sp,
-                        color = AppleTextSecondary
-                    )
-                }
-            }
-
-            if (state.discoveredRooms.isEmpty()) {
-                item {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                tint = AppleTextSecondary,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Searching for nearby games...",
-                                fontSize = 14.sp,
-                                color = AppleTextSecondary
-                            )
-                            Text(
-                                text = "Ensure both phones are on the same Wi-Fi or Hotspot.",
-                                fontSize = 12.sp,
-                                color = AppleTextSecondary.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
-                }
-            } else {
-                items(state.discoveredRooms) { room ->
-                    Surface(
-                        onClick = { onJoinRoomClick(room.joinCode, room.hostIp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(18.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = room.roomName,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = AppleTextPrimary
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Code: ${room.joinCode} • ${room.zoneRadiusMeters.toInt()}m zone",
-                                    fontSize = 13.sp,
-                                    color = AppleTextSecondary
-                                )
-                            }
-
-                            Button(
-                                onClick = { onJoinRoomClick(room.joinCode, room.hostIp) },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AppleAccentBlue)
-                            ) {
-                                Text("Join", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
                 }
             }
 

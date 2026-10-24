@@ -1,7 +1,6 @@
 package com.manhunt.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +8,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,14 +19,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.manhunt.app.data.model.NetworkSyncStatus
 import com.manhunt.app.data.model.Role
 import com.manhunt.app.ui.components.AppleCard
 import com.manhunt.app.ui.components.ApplePrimaryButton
 import com.manhunt.app.ui.components.AppleSecondaryButton
 import com.manhunt.app.ui.components.RoleBadge
-import com.manhunt.app.ui.theme.AppleAccentBlue
-import com.manhunt.app.ui.theme.AppleTextPrimary
-import com.manhunt.app.ui.theme.AppleTextSecondary
+import com.manhunt.app.ui.theme.*
 import com.manhunt.app.viewmodel.GameUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,12 +43,41 @@ fun LobbyScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        session.roomName,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AppleTextPrimary
-                    )
+                    Column {
+                        Text(
+                            session.roomName,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppleTextPrimary
+                        )
+                        // Cloud sync status indicator
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            val dotColor = when (state.networkStatus) {
+                                NetworkSyncStatus.ONLINE -> AppleHiderGreen
+                                NetworkSyncStatus.SYNCING -> AppleSeekerOrange
+                                NetworkSyncStatus.OFFLINE -> AppleDangerRed
+                            }
+                            val statusLabel = when (state.networkStatus) {
+                                NetworkSyncStatus.ONLINE -> "Cellular Cloud Sync Active"
+                                NetworkSyncStatus.SYNCING -> "Syncing..."
+                                NetworkSyncStatus.OFFLINE -> "No Connection"
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(dotColor)
+                            )
+                            Text(
+                                text = statusLabel,
+                                fontSize = 11.sp,
+                                color = AppleTextSecondary
+                            )
+                        }
+                    }
                 },
                 actions = {
                     IconButton(onClick = onLeaveLobbyClick) {
@@ -80,8 +108,8 @@ fun LobbyScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "JOIN CODE",
-                            fontSize = 12.sp,
+                            text = "CLOUD JOIN CODE",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = AppleTextSecondary,
                             letterSpacing = 1.sp
@@ -96,26 +124,78 @@ fun LobbyScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Share this code or connect via local Wi-Fi / Hotspot.",
+                            text = "Players can join from anywhere using cellular data.",
                             fontSize = 12.sp,
                             color = AppleTextSecondary
                         )
 
                         Spacer(modifier = Modifier.height(14.dp))
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = 4.dp)
                         ) {
+                            val zoneText = if (session.isUnlimitedZone) "📍 Unlimited" else "📍 ${session.zoneRadiusMeters.toInt()}m"
+                            val headStartText = if (session.headStartMinutes > 0) "⏳ ${session.headStartMinutes}m Start" else "⏳ 0m Start"
+
+                            Text(text = "⏱ ${session.durationMinutes}m", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppleTextPrimary)
+                            Text(text = "•", fontSize = 12.sp, color = AppleTextSecondary)
+                            Text(text = zoneText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppleTextPrimary)
+                            Text(text = "•", fontSize = 12.sp, color = AppleTextSecondary)
+                            Text(text = headStartText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppleTextPrimary)
+                        }
+
+                        if (session.isShrinkingZoneEnabled || session.autoPingIntervalMinutes > 0 || session.safeZones.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (session.isShrinkingZoneEnabled) {
+                                    Text(text = "⚡ Shrinking Zone", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = AppleSeekerOrange)
+                                }
+                                if (session.autoPingIntervalMinutes > 0) {
+                                    Text(text = "📡 Ping: ${session.autoPingIntervalMinutes}m", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Color(0xFF6366F1))
+                                }
+                                if (session.safeZones.isNotEmpty()) {
+                                    Text(text = "🛡️ ${session.safeZones.size} Safe Zones", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = AppleHiderGreen)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // CRITICAL CELLULAR DATA REQUIREMENT WARNING NOTICE
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFFFFFBEB),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "⏱ ${session.durationMinutes} mins",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = AppleTextPrimary
+                                text = "Cellular Data Required (5G / 4G / LTE)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB45309)
                             )
                             Text(
-                                text = "📍 ${session.zoneRadiusMeters.toInt()}m zone",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = AppleTextPrimary
+                                text = "All players must have an active mobile data connection enabled. Long-range GPS tracking updates across miles via the cloud.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF92400E),
+                                lineHeight = 16.sp
                             )
                         }
                     }

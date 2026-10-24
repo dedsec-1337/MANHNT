@@ -12,90 +12,78 @@ enum class GameStatus {
     FINISHED
 }
 
+enum class NetworkSyncStatus {
+    ONLINE,    // Successfully syncing with Firebase REST over cellular data
+    SYNCING,   // Request in flight
+    OFFLINE    // Network error or offline
+}
+
+/**
+ * Safe Zone where Hiders cannot be caught (e.g. Base, Pavilion, Library)
+ */
+data class SafeZone(
+    val id: String = "",
+    val name: String = "Safe Zone",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val radiusMeters: Double = 40.0
+)
+
 data class Player(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     val avatarEmoji: String = "🏃",
-    var role: Role = Role.SEEKER,
-    var isCaught: Boolean = false,
-    val catchCode: String = "", // 4-digit code shown on Hider phone
-    var latitude: Double = 0.0,
-    var longitude: Double = 0.0,
-    var isOutOfZone: Boolean = false,
-    var lastUpdatedEpochMs: Long = System.currentTimeMillis()
+    val role: Role = Role.SEEKER,
+    val isCaught: Boolean = false,
+    val catchCode: String = "", // 4-digit PIN shown on Hider screen
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val isOutOfZone: Boolean = false,
+    val isInSafeZone: Boolean = false,
+    val safeZoneName: String? = null,
+    val lastUpdatedEpochMs: Long = System.currentTimeMillis()
 )
 
 data class GameSession(
-    val roomId: String,
-    val roomName: String,
-    val joinCode: String,
-    val hostPlayerId: String,
+    val roomId: String = "",
+    val roomName: String = "",
+    val joinCode: String = "",
+    val hostPlayerId: String = "",
     val status: GameStatus = GameStatus.LOBBY,
     val zoneCenterLat: Double = 0.0,
     val zoneCenterLng: Double = 0.0,
-    val zoneRadiusMeters: Double = 500.0,
+    val zoneRadiusMeters: Double = 1000.0,
     val durationMinutes: Int = 30,
     val remainingSeconds: Int = 1800,
     val isPaused: Boolean = false,
     val winnerRole: Role? = null,
-    val totalCatches: Int = 0
+    val totalCatches: Int = 0,
+
+    // Advanced Lobby & Game Settings
+    val zoneSizePreset: String = "1000m", // "1000m", "2000m", "UNLIMITED"
+    val isUnlimitedZone: Boolean = false,
+    val headStartMinutes: Int = 0, // 0, 1, 2, 3, 4, 5, 10, 15 min
+    val headStartRemainingSeconds: Int = 0,
+    val isShrinkingZoneEnabled: Boolean = false,
+    val currentDynamicZoneRadiusMeters: Double = 1000.0,
+    val autoPingIntervalMinutes: Int = 0, // 0 (Off), 2, 5 min
+    val isAutoPingActive: Boolean = false, // 10s reveal active
+    val autoPingRemainingSeconds: Int = 0,
+    val safeZones: List<SafeZone> = emptyList()
 )
 
-data class DiscoveredRoom(
-    val joinCode: String,
-    val roomName: String,
-    val hostIp: String,
-    val hostPort: Int,
-    val playerCount: Int,
-    val zoneRadiusMeters: Double
+/**
+ * Root JSON structure stored under /rooms/{joinCode}.json in Firebase Realtime Database
+ */
+data class RoomNetworkModel(
+    val session: GameSession = GameSession(),
+    val players: Map<String, Player> = emptyMap(),
+    val lastCatchAttempt: CatchAttemptPayload? = null
 )
 
-// P2P Network Packets (JSON serializable)
-sealed class P2PPacket {
-    data class DiscoveryBroadcast(
-        val type: String = "DISCOVERY",
-        val joinCode: String,
-        val roomName: String,
-        val hostPort: Int = 9876,
-        val playerCount: Int,
-        val zoneRadiusMeters: Double
-    ) : P2PPacket()
-
-    data class JoinRequest(
-        val type: String = "JOIN_REQUEST",
-        val player: Player
-    ) : P2PPacket()
-
-    data class SyncState(
-        val type: String = "SYNC_STATE",
-        val session: GameSession,
-        val players: List<Player>
-    ) : P2PPacket()
-
-    data class LocationUpdate(
-        val type: String = "LOCATION_UPDATE",
-        val playerId: String,
-        val latitude: Double,
-        val longitude: Double,
-        val isOutOfZone: Boolean
-    ) : P2PPacket()
-
-    data class CatchAttempt(
-        val type: String = "CATCH_ATTEMPT",
-        val seekerId: String,
-        val targetHiderId: String,
-        val enteredCode: String
-    ) : P2PPacket()
-
-    data class CatchResult(
-        val type: String = "CATCH_RESULT",
-        val success: Boolean,
-        val targetHiderId: String,
-        val message: String
-    ) : P2PPacket()
-
-    data class PauseToggle(
-        val type: String = "PAUSE_TOGGLE",
-        val isPaused: Boolean
-    ) : P2PPacket()
-}
+data class CatchAttemptPayload(
+    val seekerId: String = "",
+    val targetHiderId: String = "",
+    val enteredCode: String = "",
+    val timestamp: Long = System.currentTimeMillis()
+)

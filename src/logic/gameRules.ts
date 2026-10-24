@@ -58,6 +58,45 @@ export function isOutsidePlayZone(
   return dist > zoneRadiusMeters;
 }
 
+export type GeofenceStatus = 'INSIDE' | 'BOUNDARY_ALERT' | 'OUT_OF_BOUNDS';
+
+/**
+ * High-accuracy Geofence evaluation with boundary buffer detection.
+ */
+export function evaluateGeofence(
+  playerCoord: LatLng,
+  zoneCenter: LatLng,
+  zoneRadiusMeters: number,
+  bufferMeters: number = 25
+): {
+  status: GeofenceStatus;
+  distanceFromCenter: number;
+  distanceToBoundary: number;
+} {
+  const dist = calculateDistanceMeters(playerCoord, zoneCenter);
+  const distToEdge = zoneRadiusMeters - dist;
+
+  if (dist > zoneRadiusMeters) {
+    return {
+      status: 'OUT_OF_BOUNDS',
+      distanceFromCenter: dist,
+      distanceToBoundary: dist - zoneRadiusMeters,
+    };
+  } else if (distToEdge <= bufferMeters) {
+    return {
+      status: 'BOUNDARY_ALERT',
+      distanceFromCenter: dist,
+      distanceToBoundary: distToEdge,
+    };
+  } else {
+    return {
+      status: 'INSIDE',
+      distanceFromCenter: dist,
+      distanceToBoundary: distToEdge,
+    };
+  }
+}
+
 /**
  * Generates a 4-digit PIN for catch confirmation.
  */

@@ -4,6 +4,7 @@ import {
   calculateDistanceMeters,
   calculateBearing,
   isOutsidePlayZone,
+  evaluateGeofence,
   verifyCatchCode,
   assignPlayerRoles,
   canAttemptCatch,
@@ -38,6 +39,26 @@ test('isOutsidePlayZone detects if player is inside or outside radius', () => {
 
   assert.equal(isOutsidePlayZone(inside, center, 200), false);
   assert.equal(isOutsidePlayZone(outside, center, 200), true);
+});
+
+test('evaluateGeofence correctly identifies INSIDE, BOUNDARY_ALERT, and OUT_OF_BOUNDS', () => {
+  const center = { latitude: 40.0, longitude: -74.0 };
+  const radius = 500; // 500m
+
+  // Safe center
+  const pSafe = { latitude: 40.001, longitude: -74.0 }; // ~111m
+  const evalSafe = evaluateGeofence(pSafe, center, radius, 25);
+  assert.equal(evalSafe.status, 'INSIDE');
+
+  // Close to border: e.g. ~485m (within 25m buffer of 500m)
+  const pBuffer = { latitude: 40.00438, longitude: -74.0 }; // ~486m
+  const evalBuffer = evaluateGeofence(pBuffer, center, radius, 25);
+  assert.equal(evalBuffer.status, 'BOUNDARY_ALERT');
+
+  // Out of bounds: e.g. ~520m
+  const pOut = { latitude: 40.0047, longitude: -74.0 }; // ~522m
+  const evalOut = evaluateGeofence(pOut, center, radius, 25);
+  assert.equal(evalOut.status, 'OUT_OF_BOUNDS');
 });
 
 test('canAttemptCatch activates strictly when within 10 meters', () => {

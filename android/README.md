@@ -1,44 +1,103 @@
-# Manhunt — Native Android GPS Chase Game
+<div align="center">
 
-A premium native Android outdoor game built with **Kotlin**, **Jetpack Compose**, **OSMDroid (OpenStreetMap)**, **Room (SQLite)**, and peer-to-peer **Local Wi-Fi / Hotspot Networking** (UDP Discovery + TCP Sockets).
+# 🏃 MANHNT
+### Premium Native Android GPS Chase Game
 
-## Features
-- **P2P Local Network Discovery**: No cloud server, no Firebase, completely decentralized. Automatically detects nearby matches over local Wi-Fi / Hotspot via UDP multicast on port 8888.
-- **TCP Sync Relay**: Host's phone acts as an in-memory TCP server (port 9876) streaming coordinates and catch events.
-- **OSMDroid Map Engine**: Custom OpenStreetMap tile rendering with dynamic circular play zone boundaries (200m – 2km).
-- **Asymmetric Role Mechanics**:
-  - **Seekers**: See real-time radar markers of fleeing Hiders. Once within 10m, the "Catch" button activates.
-  - **Hiders**: Map displays stealth mode (only own position). A minimalist Apple-inspired Compass needle strip points directly to the nearest Seeker with real-time distance readouts.
-- **Catch Confirmation**: 4-digit verification PIN displayed on the Hider's screen to confirm tags.
-- **Foreground Location Service**: `ManhuntLocationService` with ongoing notification and automatic battery optimization whitelisting intent.
-- **Room Database**: Local storage for user profile, device UUID, and match history.
+[![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026--34)-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
+[![Language](https://img.shields.io/badge/Language-Kotlin%201.9.23-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![UI](https://img.shields.io/badge/UI-Jetpack%20Compose%202024.04-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Database](https://img.shields.io/badge/Sync-Firebase%20RTDB%20REST-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com)
+[![Maps](https://img.shields.io/badge/Maps-OSMDroid%206.1.18-7EBC6F?logo=openstreetmap&logoColor=white)](https://github.com/osmdroid/osmdroid)
 
-## How to Open in Android Studio & Generate APK
+*City-wide, long-range real-life Manhunt referee running natively on Android with 100% Jetpack Compose, OpenStreetMap, and Firebase Realtime Database REST sync over 5G/4G cellular data.*
 
-1. **Extract Project**:
-   - Extract `manhunt-android-app.zip` into your preferred projects directory.
+[Features](#-features) • [Architecture](#-architecture) • [Firebase Setup](#-firebase-database-setup) • [Battery Optimization](#-battery-optimization--background-gps) • [Geofencing](#-geofencing-engine) • [Building the APK](#-how-to-build--run-in-android-studio)
 
-2. **Open in Android Studio**:
-   - Launch **Android Studio** (Hedgehog, Iguana, Jellyfish, or newer).
-   - Click **File > Open...** and select the root `Manhunt` directory (where `settings.gradle.kts` is located).
-   - Android Studio will automatically recognize Gradle and sync dependencies (Jetpack Compose, OSMDroid, Room, Accompanist).
+</div>
 
-3. **Requirements**:
-   - **JDK**: Java 17 (recommended: Android Studio bundled OpenJDK 17).
-   - **Android SDK**: Compile SDK 34, Min SDK 26 (Android 8.0 Oreo+).
+---
 
-4. **Run or Generate Signed APK**:
-   - **To Run Directly on Device**: Connect your Android phone via USB with USB Debugging enabled, or enable Wireless Debugging on the same Wi-Fi. Click the green **Run (Shift + F10)** button.
-   - **To Build Signed APK**:
-     1. In Android Studio, go to the menu: **Build > Generate Signed Bundle / APK...**
-     2. Select **APK** and click **Next**.
-     3. Choose or create a new Keystore file, enter your password, alias, and key password.
-     4. Select **release**, check **V1 (Jar Signature)** and **V2 (Full APK Signature)**.
-     5. Click **Create / Finish**.
-     6. Locate your signed APK in `app/release/app-release.apk` and install it onto your phones!
+## ⚡ Highlights
 
-## Hotspot / Wi-Fi Setup for Players
-1. One player turns on their Android Portable Hotspot (no mobile data required!).
-2. Other players connect to that Hotspot Wi-Fi.
-3. The organizer taps **Create Room**.
-4. Other players tap **Join Chase** or select the automatically discovered game.
+- 🌐 **Long-Range Cellular Tracking**: Players can spread out across parks, neighborhoods, and miles. Coordinates sync via Firebase Realtime Database REST API using Retrofit 2 & OkHttp 3.
+- 🎯 **Asymmetric Role Mechanics**:
+  - **Seekers**: Track fleeing prey markers live on OpenStreetMap. When within **10 meters** of a target, the "Catch" button activates.
+  - **Hiders**: Stealth map (own location only). An Apple-inspired **rotating Compass Strip** (`Sensor.TYPE_ROTATION_VECTOR`) points continuously toward the nearest Seeker with real-time distance readouts.
+- ⭕ **Dynamic Circular Geofencing**:
+  - Organizers draw a circular play zone between **200m and 2km** radius.
+  - Automatic **25m boundary buffer warning** alerts players before they exit the perimeter.
+  - Out-of-bounds detection initiates a return grace countdown and notifies the match referee.
+- 🔋 **Battery Optimization & Background GPS**:
+  - Foreground Service (`ManhuntLocationService`) with `FOREGROUND_SERVICE_TYPE_LOCATION` and ongoing notification.
+  - Integrated `BatteryOptimizationHelper` to whitelist the app from Android and OEM task killers (Xiaomi MIUI/HyperOS, Samsung OneUI, Oppo ColorOS).
+- 🌙 **OLED Dark Mode**:
+  - Instant toggle between Apple-inspired clean light mode and deep OLED stealth dark mode for night chases.
+- 📱 **Pure Jetpack Compose UI**:
+  - Single-activity architecture (`MainActivity.kt`). Zero XML layouts. 16dp rounded surfaces, soft diffuse shadows, and Roboto typography.
+- 💾 **On-Device Persistence**:
+  - **Room (SQLite)** stores persistent player UUID, codenames, and match statistics.
+
+---
+
+## 🔥 Firebase Database Setup
+
+MANHNT connects directly to Firebase Realtime Database using its **REST API** (`PUT`, `GET`, `PATCH`, `DELETE`). No native `google-services.json` setup is required!
+
+### 1. Database URL Configuration
+The database URL is pre-configured in `app/src/main/java/com/manhunt/app/data/Constants.kt`:
+
+```kotlin
+object Constants {
+    const val FIREBASE_DATABASE_URL = "https://manhnt-ba00c-default-rtdb.asia-southeast1.firebasedatabase.app/"
+}
+```
+
+### 2. Realtime Database Security Rules
+In your [Firebase Console](https://console.firebase.google.com/), open **Realtime Database > Rules** and set:
+
+```json
+{
+  "rules": {
+    "rooms": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
+```
+
+---
+
+## 🔋 Battery Optimization & Background GPS
+
+Modern Android versions and aggressive OEM operating systems (Xiaomi MIUI/HyperOS, Samsung OneUI, Huawei EMUI, Oppo ColorOS) terminate background apps when the screen is locked to save battery.
+
+MANHNT tackles this with a multi-layered approach:
+1. **Foreground Service**: `ManhuntLocationService` runs with `FOREGROUND_SERVICE_TYPE_LOCATION` and a persistent ongoing notification with live countdown (`"Cellular GPS active — 22:45 remaining"`).
+2. **Exemption Intent**: `BatteryOptimizationHelper.createOptimizationExemptionIntent()` launches `Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` so the user can whitelist MANHNT with one tap.
+3. **OEM Auto-Start Fallback**: Detects device manufacturer and opens manufacturer-specific background manager settings.
+
+---
+
+## ⭕ Geofencing Engine
+
+- **High-Accuracy Haversine Calculation**: Distance between players and play zone center calculated in meters.
+- **25m Warning Buffer**: Players approaching within 25m of the boundary receive a yellow warning indicator on their HUD.
+- **Out-of-Bounds Detection**: Crossing the boundary turns the HUD red, prompts an alert notification, and begins a 30-second return grace timer before referee penalties are triggered.
+
+---
+
+## 🚀 How to Build & Run in Android Studio
+
+1. Open **Android Studio** and choose **File > Open...** > select this extracted folder.
+2. Wait for Gradle Sync to complete.
+3. Connect an Android phone via USB (with Developer Mode & USB Debugging enabled).
+4. Click **Run (Shift + F10)**.
+
+### Generating a Signed Release APK
+1. In Android Studio, go to **Build > Generate Signed Bundle / APK...**
+2. Choose **APK** and click **Next**.
+3. Create or select a keystore file, set passwords and key alias.
+4. Select build variant: **release**.
+5. Check both **V1 (Jar Signature)** and **V2 (Full APK Signature)**.
+6. Click **Finish**. Your APK will be generated at `app/release/app-release.apk`.

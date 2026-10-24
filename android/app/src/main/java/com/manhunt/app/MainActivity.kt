@@ -42,13 +42,14 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
-            ManhuntTheme {
+            val uiState by viewModel.uiState.collectAsState()
+            var currentScreen by remember { mutableStateOf(Screen.HOME) }
+
+            ManhuntTheme(darkTheme = uiState.isDarkMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val uiState by viewModel.uiState.collectAsState()
-                    var currentScreen by remember { mutableStateOf(Screen.HOME) }
 
                     // Runtime Permissions with Accompanist
                     val permissionsList = remember {
@@ -67,7 +68,6 @@ class MainActivity : ComponentActivity() {
                         if (!permissionsState.allPermissionsGranted) {
                             permissionsState.launchMultiplePermissionRequest()
                         }
-                        // Check battery optimization intent
                         ManhuntLocationService.createBatteryOptimizationIntent(this@MainActivity)?.let { intent ->
                             try {
                                 startActivity(intent)
@@ -85,7 +85,9 @@ class MainActivity : ComponentActivity() {
                                     remainingSeconds = uiState.session?.remainingSeconds ?: 1800,
                                     zoneLat = uiState.session?.zoneCenterLat ?: 0.0,
                                     zoneLng = uiState.session?.zoneCenterLng ?: 0.0,
-                                    zoneRadius = uiState.session?.zoneRadiusMeters ?: 500.0
+                                    zoneRadius = uiState.session?.zoneRadiusMeters ?: 500.0,
+                                    joinCode = uiState.session?.joinCode ?: "",
+                                    playerId = uiState.myPlayer.id
                                 )
                             }
                             GameStatus.FINISHED -> {
@@ -114,20 +116,25 @@ class MainActivity : ComponentActivity() {
                             Screen.HOME -> HomeScreen(
                                 state = uiState,
                                 onCreateRoomClick = { currentScreen = Screen.CREATE_ROOM },
-                                onJoinRoomClick = { code, hostIp ->
-                                    viewModel.joinRoom(code, hostIp)
+                                onJoinRoomClick = { code ->
+                                    viewModel.joinRoom(code) { success ->
+                                        if (success) currentScreen = Screen.LOBBY
+                                    }
                                 },
                                 onEditProfileClick = { currentScreen = Screen.PROFILE }
                             )
 
                             Screen.CREATE_ROOM -> CreateRoomScreen(
                                 onBackClick = { currentScreen = Screen.HOME },
-                                onCreateRoomSubmit = { name, duration, radius, ratio ->
+                                onCreateRoomSubmit = { name, duration, zonePreset, headStart, shrinking, autoPing, safeZones ->
                                     viewModel.createRoom(
                                         roomName = name,
                                         durationMinutes = duration,
-                                        zoneRadiusMeters = radius,
-                                        hiderRatio = ratio
+                                        zoneSizePreset = zonePreset,
+                                        headStartMinutes = headStart,
+                                        isShrinkingZoneEnabled = shrinking,
+                                        autoPingIntervalMinutes = autoPing,
+                                        safeZones = safeZones
                                     )
                                     currentScreen = Screen.LOBBY
                                 }
@@ -168,6 +175,7 @@ class MainActivity : ComponentActivity() {
                             Screen.PROFILE -> ProfileScreen(
                                 state = uiState,
                                 onSaveProfile = { name, emoji -> viewModel.updateProfile(name, emoji) },
+                                onToggleDarkMode = { viewModel.toggleDarkMode() },
                                 onClose = { currentScreen = Screen.HOME }
                             )
                         }
@@ -181,7 +189,9 @@ class MainActivity : ComponentActivity() {
         remainingSeconds: Int,
         zoneLat: Double,
         zoneLng: Double,
-        zoneRadius: Double
+        zoneRadius: Double,
+        joinCode: String,
+        playerId: String
     ) {
         val intent = Intent(this, ManhuntLocationService::class.java).apply {
             action = ManhuntLocationService.ACTION_START
@@ -189,6 +199,8 @@ class MainActivity : ComponentActivity() {
             putExtra(ManhuntLocationService.EXTRA_ZONE_LAT, zoneLat)
             putExtra(ManhuntLocationService.EXTRA_ZONE_LNG, zoneLng)
             putExtra(ManhuntLocationService.EXTRA_ZONE_RADIUS, zoneRadius)
+            putExtra(ManhuntLocationService.EXTRA_JOIN_CODE, joinCode)
+            putExtra(ManhuntLocationService.EXTRA_PLAYER_ID, playerId)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)

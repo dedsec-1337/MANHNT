@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Manhunt</string>
-    <string name="location_service_channel_name">Manhunt Active Chase</string>
+    <string name="app_name">MANHNT</string>
+    <string name="location_service_channel_name">MANHNT Active Chase</string>
     <string name="location_service_channel_desc">Maintains high-accuracy GPS tracking during live manhunt matches.</string>
 </resources>
