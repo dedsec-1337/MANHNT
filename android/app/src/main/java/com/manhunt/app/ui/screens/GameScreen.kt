@@ -32,6 +32,8 @@ fun GameScreen(
     state: GameUiState,
     onToggleSafetyPause: () -> Unit,
     onAttemptCatch: (targetHiderId: String, code: String) -> Unit,
+    onActivateStealth: () -> Unit,
+    onStartJailbreak: () -> Unit,
     onLeaveGame: () -> Unit
 ) {
     val session = state.session ?: return
@@ -458,6 +460,33 @@ fun GameScreen(
                             color = AppleTextPrimary
                         )
                     }
+                }
+            }
+
+            // Hider abilities: Stealth + Jailbreak
+            if (state.myPlayer.role == Role.HIDER) {
+                val me = state.myPlayer
+                val isFree = !me.isCaught && !me.isInJail
+                val stealthText = when {
+                    !isFree -> "Stealth unavailable"
+                    state.isStealthActive || me.isStealthActive -> "Stealth Active"
+                    state.stealthCooldownSeconds > 0 -> "Stealth Cooldown (${state.stealthCooldownSeconds}s)"
+                    else -> "Activate Stealth"
+                }
+                ApplePrimaryButton(
+                    text = stealthText,
+                    enabled = isFree && !session.isPaused && !state.isStealthActive && !me.isStealthActive && state.stealthCooldownSeconds <= 0,
+                    backgroundColor = Color(0xFF6366F1),
+                    onClick = onActivateStealth
+                )
+
+                if (session.jailEnabled && isFree && state.players.any { it.role == Role.HIDER && it.isInJail }) {
+                    ApplePrimaryButton(
+                        text = if (session.isJailbreakInProgress) "Jailbreak in progress (${session.jailbreakProgressSeconds}s)" else "Start Jailbreak",
+                        enabled = !session.isPaused && !session.isJailbreakInProgress,
+                        backgroundColor = AppleHiderGreen,
+                        onClick = onStartJailbreak
+                    )
                 }
             }
 
