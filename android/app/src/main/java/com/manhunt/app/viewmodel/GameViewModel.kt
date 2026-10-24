@@ -71,6 +71,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
     private var countdownTimerJob: Job? = null
+    private var jailbreakJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -86,6 +87,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { ManhuntLocationService.locationUpdates.collect { loc -> handleLocation(loc.latitude, loc.longitude) } }
         viewModelScope.launch { firebaseSync.roomState.collect { if (it != null) applyRoom(it) } }
         viewModelScope.launch { firebaseSync.syncStatus.collect { s -> _uiState.update { it.copy(networkStatus = s) } } }
+        viewModelScope.launch {
+            while (isActive) {
+                delay(1000)
+                refreshStealthState()
+            }
+        }
     }
 
     fun createRoom(roomName: String, durationMinutes: Int, zoneSizePreset: String = "1000m", headStartMinutes: Int = 0, isShrinkingZoneEnabled: Boolean = false, autoPingIntervalMinutes: Int = 0, safeZones: List<SafeZone> = emptyList(), centerLat: Double = 0.0, centerLng: Double = 0.0) {
@@ -191,14 +198,45 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (GeoUtils.distanceMeters(me.latitude, me.longitude, s.jailLat, s.jailLng) > s.jailRadiusMeters) {
             _uiState.update { it.copy(toastMessage = "Enter jail zone") }; return
         }
-        viewModelScope.launch { firebaseSync.updateSession(s.joinCode, mapOf("isJailbreakInProgress" to true, "jailbreakProgressSeconds" to 0)) }
+        jailbreakJob?.cancel()
+        jailbreakJob = viewModelScope.launch {
+            firebaseSync.updateSession(s.joinCode, mapOf("isJailbreakInProgress" to true, "jailbreakProgressSeconds" to 0))
+            for (progress in 1..Constants.JAILBREAK_HOLD_SECONDS) {
+                delay(1000)
+                val current = _uiState.value.session ?: return@launch
+                val pos = _uiState.value.myPlayer
+                val outsideJail = GeoUtils.distanceMeters(pos.latitude, pos.longitude, current.jailLat, current.jailLng) > current.jailRadiusMeters
+                if (current.isPaused || outsideJail || pos.isCaught || pos.isInJail) {
+                    resetJailbreak(current.joinCode)
+                    _uiState.update { it.copy(toastMessage = "Jailbreak interrupted") }
+                    return@launch
+                }
+                if (progress < Constants.JAILBREAK_HOLD_SECONDS) {
+                    firebaseSync.updateSession(current.joinCode, mapOf("jailbreakProgressSeconds" to progress))
+                }
+            }
+            completeJailbreak()
+        }
     }
 
-    fun tickJailbreakProgress() {
-        val s = _uiState.value.session ?: return
-        if (!s.isJailbreakInProgress) return
-        val next = s.jailbreakProgressSeconds + 1
-        if (next >= Constants.JAILBREAK_HOLD_SECONDS) completeJailbreak() else viewModelScope.launch { firebaseSync.updateSession(s.joinCode, mapOf("jailbreakProgressSeconds" to next)) }
+    private suspend fun resetJailbreak(joinCode: String) {
+        firebaseSync.updateSession(joinCode, mapOf("isJailbreakInProgress" to false, "jailbreakProgressSeconds" to 0))
+    }
+
+    private fun refreshStealthState() {
+        val state = _uiState.value
+        val me = state.myPlayer
+        val now = System.currentTimeMillis()
+        val active = me.isStealthActive && now < me.stealthUntilEpochMs
+        val cooldown = (((me.stealthCooldownUntilEpochMs - now).coerceAtLeast(0L) + 999L) / 1000L).toInt()
+        if (me.isStealthActive && !active) {
+            val updated = me.copy(isStealthActive = false)
+            _uiState.update { it.copy(myPlayer = updated) }
+            state.session?.let { s -> viewModelScope.launch { firebaseSync.joinPlayer(s.joinCode, updated) } }
+        }
+        if (active != state.isStealthActive || cooldown != state.stealthCooldownSeconds) {
+            _uiState.update { it.copy(isStealthActive = active, stealthCooldownSeconds = cooldown) }
+        }
     }
 
     private fun completeJailbreak() {
@@ -235,7 +273,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleDarkMode() { _uiState.update { it.copy(isDarkMode = !it.isDarkMode) } }
-    fun leaveGame() { countdownTimerJob?.cancel(); _uiState.update { it.copy(session = null, players = emptyList(), isOrganizer = false) } }
+    fun leaveGame() {
+        countdownTimerJob?.cancel()
+        if (jailbreakJob?.isActive == true) {
+            jailbreakJob?.cancel()
+            _uiState.value.session?.joinCode?.let { code -> viewModelScope.launch { resetJailbreak(code) } }
+        }
+        _uiState.update { it.copy(session = null, players = emptyList(), isOrganizer = false) }
+    }
     fun leaveRoom() = leaveGame()
     fun clearToast() { _uiState.update { it.copy(toastMessage = null) } }
     fun dismissToast() = clearToast()
@@ -252,7 +297,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 currentDynamicRadiusMeters = room.session.currentDynamicZoneRadiusMeters,
                 isAutoPingActive = room.session.isAutoPingActive,
                 autoPingCountdownSeconds = room.session.autoPingRemainingSeconds,
-                isStealthActive = me.isStealthActive,
+                isStealthActive = me.isStealthActive && System.currentTimeMillis() < me.stealthUntilEpochMs,
                 isInJail = me.isInJail,
                 pendingCatchConfirm = room.pendingCatchConfirm
             )

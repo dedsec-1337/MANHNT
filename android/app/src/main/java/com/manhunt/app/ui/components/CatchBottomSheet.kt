@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.manhunt.app.data.model.Player
 import com.manhunt.app.ui.theme.AppleAccentBlue
+import com.manhunt.app.ui.theme.AppleCardBackground
 import com.manhunt.app.ui.theme.AppleSeekerOrange
 import com.manhunt.app.ui.theme.AppleTextPrimary
 import com.manhunt.app.ui.theme.AppleTextSecondary
@@ -33,7 +34,7 @@ fun CatchBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Color.White,
+        containerColor = AppleCardBackground,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(

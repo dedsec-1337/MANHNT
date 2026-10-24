@@ -1,5 +1,8 @@
 package com.manhunt.app.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 
 // Light Palette (Apple-inspired Clean Light)
@@ -18,11 +21,15 @@ val AppleTextPrimaryDark = Color(0xFFF5F5F7)
 val AppleTextSecondaryDark = Color(0xFF98989D)
 val AppleDividerDark = Color(0xFF2C2C2E)
 
-// Default (light) aliases used across screens/components
-val AppleTextPrimary = AppleTextPrimaryLight
-val AppleTextSecondary = AppleTextSecondaryLight
-val AppleCardBackground = AppleCardBackgroundLight
-val AppleDivider = AppleDividerLight
+// Theme-aware aliases (follow light/dark ColorScheme from ManhuntTheme)
+val AppleTextPrimary: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurface
+val AppleTextSecondary: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.onSurfaceVariant
+val AppleCardBackground: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surface
+val AppleDivider: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.outline
 
 // Shared Accents
 val AppleAccentBlue = Color(0xFF007AFF)

@@ -127,7 +127,8 @@ fun OSMMapView(
 
             if (userRole == Role.SEEKER || isAutoPingActive) {
                 val hiders = otherPlayers.filter {
-                    it.role == Role.HIDER && !it.isCaught && !it.isStealthActive
+                    it.role == Role.HIDER && !it.isCaught &&
+                        !(it.isStealthActive && System.currentTimeMillis() < it.stealthUntilEpochMs)
                 }
                 for (hider in hiders) {
                     if (hider.latitude != 0.0 && hider.longitude != 0.0) {
