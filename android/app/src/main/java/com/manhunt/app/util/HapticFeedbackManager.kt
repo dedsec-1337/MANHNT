@@ -5,16 +5,12 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.manhunt.app.data.Constants
 
-/**
- * Manages proximity haptic alerts for outdoor gameplay.
- * Enables Hiders to sense nearby Seekers without staring at the phone screen.
- */
 class HapticFeedbackManager(context: Context) {
 
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-        vibratorManager?.defaultVibrator
+        (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
     } else {
         @Suppress("DEPRECATION")
         context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
@@ -22,89 +18,50 @@ class HapticFeedbackManager(context: Context) {
 
     private var lastVibrateTimestamp = 0L
 
-    /**
-     * Proximity Alert:
-     * - Under 10m: Urgent, intense double-pulse (throttled to 1.5s)
-     * - Under 30m: Muted, distinct warning pulse (throttled to 3.5s)
-     */
     fun evaluateProximityHaptics(distanceMeters: Double) {
         if (vibrator == null || !vibrator.hasVibrator()) return
         val now = System.currentTimeMillis()
-
         when {
-            distanceMeters in 0.0..10.0 -> {
-                if (now - lastVibrateTimestamp >= 1500L) {
+            distanceMeters <= Constants.HEARTBEAT_CRITICAL_METERS -> {
+                if (now - lastVibrateTimestamp >= 1200L) {
                     lastVibrateTimestamp = now
-                    triggerCriticalAlert()
+                    pulse(longArrayOf(0, 80, 50, 80, 50, 120), intArrayOf(0, 255, 0, 255, 0, 255))
                 }
             }
-            distanceMeters in 10.01..30.0 -> {
-                if (now - lastVibrateTimestamp >= 3500L) {
+            distanceMeters <= Constants.HEARTBEAT_NEAR_METERS -> {
+                if (now - lastVibrateTimestamp >= 2500L) {
                     lastVibrateTimestamp = now
-                    triggerNearAlert()
+                    pulse(longArrayOf(0, 100, 60, 100), intArrayOf(0, 200, 0, 200))
+                }
+            }
+            distanceMeters <= Constants.HEARTBEAT_MID_METERS -> {
+                if (now - lastVibrateTimestamp >= 4000L) {
+                    lastVibrateTimestamp = now
+                    pulse(longArrayOf(0, 140), intArrayOf(0, 160))
+                }
+            }
+            distanceMeters <= Constants.HEARTBEAT_FAR_METERS -> {
+                if (now - lastVibrateTimestamp >= 6000L) {
+                    lastVibrateTimestamp = now
+                    pulse(longArrayOf(0, 90), intArrayOf(0, 100))
                 }
             }
         }
     }
 
-    /**
-     * Short, distinct pulse when a Seeker is within 30 meters.
-     */
-    fun triggerNearAlert() {
-        if (vibrator == null || !vibrator.hasVibrator()) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val effect = VibrationEffect.createOneShot(180L, VibrationEffect.DEFAULT_AMPLITUDE)
-            vibrator.vibrate(effect)
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(180L)
-        }
-    }
+    fun triggerNearAlert() = pulse(longArrayOf(0, 180), intArrayOf(0, 180))
+    fun triggerCriticalAlert() = pulse(longArrayOf(0, 120, 70, 120), intArrayOf(0, 255, 0, 255))
+    fun triggerCatchConfirmation() = pulse(longArrayOf(0, 250), intArrayOf(0, 200))
+    fun triggerJailbreakAlarm() = pulse(longArrayOf(0, 200, 100, 200, 100, 400), intArrayOf(0, 255, 0, 255, 0, 255))
+    fun triggerPowerUp() = pulse(longArrayOf(0, 60, 40, 60), intArrayOf(0, 180, 0, 180))
 
-    /**
-     * Rapid, urgent double-pulse when a Seeker is within 10 meters (<10m catch zone).
-     */
-    fun triggerCriticalAlert() {
+    private fun pulse(timings: LongArray, amplitudes: IntArray) {
         if (vibrator == null || !vibrator.hasVibrator()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Pattern: wait 0ms, vibrate 120ms, pause 70ms, vibrate 120ms
-            val timings = longArrayOf(0, 120, 70, 120)
-            val amplitudes = intArrayOf(0, 255, 0, 255)
-            val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
-            vibrator.vibrate(effect)
+            vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
         } else {
             @Suppress("DEPRECATION")
-            vibrator.vibrate(longArrayOf(0, 120, 70, 120), -1)
-        }
-    }
-
-    /**
-     * Haptic notification when Head Start ends and Seekers are unfrozen.
-     */
-    fun triggerHeadStartOver() {
-        if (vibrator == null || !vibrator.hasVibrator()) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val timings = longArrayOf(0, 200, 100, 200, 100, 300)
-            val amplitudes = intArrayOf(0, 200, 0, 200, 0, 255)
-            val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
-            vibrator.vibrate(effect)
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(longArrayOf(0, 200, 100, 200, 100, 300), -1)
-        }
-    }
-
-    /**
-     * Subtle confirmation when tag or catch occurs.
-     */
-    fun triggerCatchConfirmation() {
-        if (vibrator == null || !vibrator.hasVibrator()) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val effect = VibrationEffect.createOneShot(250L, VibrationEffect.DEFAULT_AMPLITUDE)
-            vibrator.vibrate(effect)
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(250L)
+            vibrator.vibrate(timings, -1)
         }
     }
 }
