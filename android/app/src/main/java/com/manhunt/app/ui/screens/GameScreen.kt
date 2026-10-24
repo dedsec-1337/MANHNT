@@ -249,7 +249,7 @@ fun GameScreen(
                     ) {
                         Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Text(
-                            text = state.safeZoneNotice!!,
+                            text = state.safeZoneNotice,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
