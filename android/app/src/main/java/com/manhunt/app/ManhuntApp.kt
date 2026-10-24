@@ -1,7 +1,6 @@
 package com.manhunt.app
 
 import android.app.Application
-import android.preference.PreferenceManager
 import androidx.room.Room
 import com.manhunt.app.data.local.AppDatabase
 import org.osmdroid.config.Configuration
@@ -18,7 +17,7 @@ class ManhuntApp : Application() {
         // Configure OSMDroid user agent & tile storage
         Configuration.getInstance().load(
             this,
-            PreferenceManager.getDefaultSharedPreferences(this)
+            getSharedPreferences("${packageName}_preferences", MODE_PRIVATE)
         )
         Configuration.getInstance().userAgentValue = packageName
 
