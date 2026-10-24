@@ -22,6 +22,7 @@ import com.manhunt.app.data.model.NetworkSyncStatus
 import com.manhunt.app.ui.components.AppleCard
 import com.manhunt.app.ui.components.ApplePrimaryButton
 import com.manhunt.app.ui.theme.AppleAccentBlue
+import com.manhunt.app.ui.theme.AppleCardBackground
 import com.manhunt.app.ui.theme.AppleTextPrimary
 import com.manhunt.app.ui.theme.AppleTextSecondary
 import com.manhunt.app.viewmodel.GameUiState
@@ -84,7 +85,7 @@ fun HomeScreen(
                     Surface(
                         onClick = onEditProfileClick,
                         shape = RoundedCornerShape(20.dp),
-                        color = Color.White
+                        color = AppleCardBackground
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),

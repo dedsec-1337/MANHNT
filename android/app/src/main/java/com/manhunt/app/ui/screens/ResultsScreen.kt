@@ -148,7 +148,7 @@ fun ResultsScreen(
             items(state.players) { player ->
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = Color.White,
+                    color = AppleCardBackground,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(

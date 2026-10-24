@@ -75,7 +75,7 @@ fun GameScreen(
         ) {
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = Color.White.copy(alpha = 0.96f),
+                color = AppleCardBackground.copy(alpha = 0.96f),
                 shadowElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -349,7 +349,7 @@ fun GameScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(24.dp),
-                    color = Color.White,
+                    color = AppleCardBackground,
                     shadowElevation = 16.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -426,7 +426,7 @@ fun GameScreen(
                 // Hider's Personal Catch Code Card
                 Surface(
                     shape = RoundedCornerShape(18.dp),
-                    color = Color.White,
+                    color = AppleCardBackground,
                     shadowElevation = 6.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -469,13 +469,13 @@ fun GameScreen(
                 val isFree = !me.isCaught && !me.isInJail
                 val stealthText = when {
                     !isFree -> "Stealth unavailable"
-                    state.isStealthActive || me.isStealthActive -> "Stealth Active"
+                    state.isStealthActive -> "Stealth Active"
                     state.stealthCooldownSeconds > 0 -> "Stealth Cooldown (${state.stealthCooldownSeconds}s)"
                     else -> "Activate Stealth"
                 }
                 ApplePrimaryButton(
                     text = stealthText,
-                    enabled = isFree && !session.isPaused && !state.isStealthActive && !me.isStealthActive && state.stealthCooldownSeconds <= 0,
+                    enabled = isFree && !session.isPaused && !state.isStealthActive && state.stealthCooldownSeconds <= 0,
                     backgroundColor = Color(0xFF6366F1),
                     onClick = onActivateStealth
                 )
