@@ -185,6 +185,20 @@ class FirebaseSyncService private constructor() {
     }
 
     /**
+     * Partial player update via PATCH /rooms/{join_code}/players/{player_id}.json
+     */
+    suspend fun patchPlayer(joinCode: String, playerId: String, updates: Map<String, Any>): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                api.patchPlayerLocation(joinCode, playerId, updates).isSuccessful
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to patch player: ${e.message}")
+                false
+            }
+        }
+    }
+
+    /**
      * Push location update via PATCH /rooms/{join_code}/players/{player_id}.json
      */
     suspend fun updateLocation(

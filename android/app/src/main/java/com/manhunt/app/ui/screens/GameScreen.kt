@@ -150,7 +150,7 @@ fun GameScreen(
                                 modifier = Modifier
                                     .size(34.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFFF2F2F7))
+                                    .background(AppleFill)
                             ) {
                                 Icon(
                                     imageVector = if (session.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
@@ -400,7 +400,7 @@ fun GameScreen(
                         LinearProgressIndicator(
                             modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                             color = AppleAccentBlue,
-                            trackColor = Color(0xFFF2F2F7)
+                            trackColor = AppleFill
                         )
                     }
                 }

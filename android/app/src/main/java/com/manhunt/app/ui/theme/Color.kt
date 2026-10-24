@@ -30,6 +30,10 @@ val AppleCardBackground: Color
     @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surface
 val AppleDivider: Color
     @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.outline
+val AppleFill: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.surfaceVariant
+val AppleInputBackground: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.background
 
 // Shared Accents
 val AppleAccentBlue = Color(0xFF007AFF)
