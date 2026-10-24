@@ -45,6 +45,7 @@ data class GameUiState(
     val toastMessage: String? = null,
     val networkStatus: NetworkSyncStatus = NetworkSyncStatus.ONLINE,
     val isJoiningRoom: Boolean = false,
+    val isCreatingRoom: Boolean = false,
     val isSeekerFrozen: Boolean = false,
     val headStartCountdownSeconds: Int = 0,
     val isShrinkingZoneActive: Boolean = false,
@@ -96,16 +97,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun createRoom(roomName: String, durationMinutes: Int, zoneSizePreset: String = "1000m", headStartMinutes: Int = 0, isShrinkingZoneEnabled: Boolean = false, autoPingIntervalMinutes: Int = 0, safeZones: List<SafeZone> = emptyList(), centerLat: Double = 0.0, centerLng: Double = 0.0, onComplete: (Boolean) -> Unit = {}) {
+        if (_uiState.value.isCreatingRoom) return
+        _uiState.update { it.copy(isCreatingRoom = true) }
         val joinCode = RandomCode.generateCode(6)
         val host = _uiState.value.myPlayer.copy(role = Role.SEEKER, latitude = centerLat, longitude = centerLng)
         val radius = when (zoneSizePreset) { "2000m" -> 2000.0; "UNLIMITED" -> 50000.0; else -> 1000.0 }
         val session = GameSession(roomId = UUID.randomUUID().toString(), roomName = roomName, joinCode = joinCode, hostPlayerId = host.id, status = GameStatus.LOBBY, zoneCenterLat = centerLat, zoneCenterLng = centerLng, zoneRadiusMeters = radius, durationMinutes = durationMinutes, remainingSeconds = durationMinutes * 60, zoneSizePreset = zoneSizePreset, isUnlimitedZone = zoneSizePreset.equals("UNLIMITED", true), headStartMinutes = headStartMinutes, headStartRemainingSeconds = headStartMinutes * 60, isShrinkingZoneEnabled = isShrinkingZoneEnabled, currentDynamicZoneRadiusMeters = radius, autoPingIntervalMinutes = autoPingIntervalMinutes, safeZones = safeZones, jailEnabled = true, jailLat = centerLat, jailLng = centerLng, jailRadiusMeters = Constants.JAIL_RADIUS_METERS)
         viewModelScope.launch {
             if (firebaseSync.createRoom(RoomNetworkModel(session = session, players = mapOf(host.id to host)))) {
-                _uiState.update { it.copy(session = session, myPlayer = host, players = listOf(host), isOrganizer = true, toastMessage = "Room $joinCode") }
+                _uiState.update { it.copy(session = session, myPlayer = host, players = listOf(host), isCreatingRoom = false, isOrganizer = true, toastMessage = "Room $joinCode") }
                 onComplete(true)
             } else {
-                _uiState.update { it.copy(toastMessage = "Couldn't create room. Check your connection and Firebase database rules.") }
+                _uiState.update { it.copy(isCreatingRoom = false, toastMessage = "Couldn't create room. Check your connection and Firebase database rules.") }
                 onComplete(false)
             }
         }
