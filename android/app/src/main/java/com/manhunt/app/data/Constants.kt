@@ -1,25 +1,27 @@
 package com.manhunt.app.data
 
-/**
- * Global application constants.
- * Configure your Firebase Realtime Database REST URL here.
- */
 object Constants {
-    /**
-     * Firebase Realtime Database Base URL for Long-Range Cellular Sync.
-     * Ensure the URL ends with a trailing slash ("/").
-     *
-     * Example: "https://your-project-default-rtdb.firebaseio.com/"
-     */
     const val FIREBASE_DATABASE_URL = "https://manhnt-ba00c-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
-    // Location update intervals
     const val LOCATION_UPDATE_INTERVAL_MS = 5000L
     const val FASTEST_LOCATION_INTERVAL_MS = 3000L
-
-    // Cloud polling interval for room state & player positions
     const val CLOUD_SYNC_POLL_INTERVAL_MS = 2500L
 
-    // Catch proximity threshold in meters
     const val CATCH_PROXIMITY_METERS = 10.0
+
+    const val HEARTBEAT_FAR_METERS = 80.0
+    const val HEARTBEAT_MID_METERS = 50.0
+    const val HEARTBEAT_NEAR_METERS = 25.0
+    const val HEARTBEAT_CRITICAL_METERS = 10.0
+
+    const val JAIL_RADIUS_METERS = 25.0
+    const val JAILBREAK_HOLD_SECONDS = 5
+    const val JAIL_HUNTER_REVEAL_METERS = 35.0
+    const val POST_JAILBREAK_IMMUNITY_SECONDS = 30
+
+    const val STEALTH_DURATION_SECONDS = 45
+    const val STEALTH_COOLDOWN_SECONDS = 180
+
+    const val MAX_DISPUTES_PER_GAME = 2
+    const val CATCH_CONFIRM_TIMEOUT_SECONDS = 12
 }

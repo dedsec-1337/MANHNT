@@ -1,26 +1,9 @@
 package com.manhunt.app.data.model
 
-enum class Role {
-    SEEKER,
-    HIDER
-}
+enum class Role { SEEKER, HIDER }
+enum class GameStatus { LOBBY, RUNNING, PAUSED, FINISHED }
+enum class NetworkSyncStatus { ONLINE, SYNCING, OFFLINE }
 
-enum class GameStatus {
-    LOBBY,
-    RUNNING,
-    PAUSED,
-    FINISHED
-}
-
-enum class NetworkSyncStatus {
-    ONLINE,    // Successfully syncing with Firebase REST over cellular data
-    SYNCING,   // Request in flight
-    OFFLINE    // Network error or offline
-}
-
-/**
- * Safe Zone where Hiders cannot be caught (e.g. Base, Pavilion, Library)
- */
 data class SafeZone(
     val id: String = "",
     val name: String = "Safe Zone",
@@ -35,13 +18,19 @@ data class Player(
     val avatarEmoji: String = "🏃",
     val role: Role = Role.SEEKER,
     val isCaught: Boolean = false,
-    val catchCode: String = "", // 4-digit PIN shown on Hider screen
+    val catchCode: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
     val isOutOfZone: Boolean = false,
     val isInSafeZone: Boolean = false,
     val safeZoneName: String? = null,
-    val lastUpdatedEpochMs: Long = System.currentTimeMillis()
+    val lastUpdatedEpochMs: Long = System.currentTimeMillis(),
+    val isInJail: Boolean = false,
+    val immunityUntilEpochMs: Long = 0L,
+    val isStealthActive: Boolean = false,
+    val stealthUntilEpochMs: Long = 0L,
+    val stealthCooldownUntilEpochMs: Long = 0L,
+    val disputesRemaining: Int = 2
 )
 
 data class GameSession(
@@ -58,27 +47,29 @@ data class GameSession(
     val isPaused: Boolean = false,
     val winnerRole: Role? = null,
     val totalCatches: Int = 0,
-
-    // Advanced Lobby & Game Settings
-    val zoneSizePreset: String = "1000m", // "1000m", "2000m", "UNLIMITED"
+    val zoneSizePreset: String = "1000m",
     val isUnlimitedZone: Boolean = false,
-    val headStartMinutes: Int = 0, // 0, 1, 2, 3, 4, 5, 10, 15 min
+    val headStartMinutes: Int = 0,
     val headStartRemainingSeconds: Int = 0,
     val isShrinkingZoneEnabled: Boolean = false,
     val currentDynamicZoneRadiusMeters: Double = 1000.0,
-    val autoPingIntervalMinutes: Int = 0, // 0 (Off), 2, 5 min
-    val isAutoPingActive: Boolean = false, // 10s reveal active
+    val autoPingIntervalMinutes: Int = 0,
+    val isAutoPingActive: Boolean = false,
     val autoPingRemainingSeconds: Int = 0,
-    val safeZones: List<SafeZone> = emptyList()
+    val safeZones: List<SafeZone> = emptyList(),
+    val jailEnabled: Boolean = true,
+    val jailLat: Double = 0.0,
+    val jailLng: Double = 0.0,
+    val jailRadiusMeters: Double = 25.0,
+    val isJailbreakInProgress: Boolean = false,
+    val jailbreakProgressSeconds: Int = 0
 )
 
-/**
- * Root JSON structure stored under /rooms/{joinCode}.json in Firebase Realtime Database
- */
 data class RoomNetworkModel(
     val session: GameSession = GameSession(),
     val players: Map<String, Player> = emptyMap(),
-    val lastCatchAttempt: CatchAttemptPayload? = null
+    val lastCatchAttempt: CatchAttemptPayload? = null,
+    val pendingCatchConfirm: CatchConfirmPayload? = null
 )
 
 data class CatchAttemptPayload(
@@ -86,4 +77,14 @@ data class CatchAttemptPayload(
     val targetHiderId: String = "",
     val enteredCode: String = "",
     val timestamp: Long = System.currentTimeMillis()
+)
+
+data class CatchConfirmPayload(
+    val seekerId: String = "",
+    val targetHiderId: String = "",
+    val seekerName: String = "",
+    val distanceMeters: Double = 0.0,
+    val createdAtEpochMs: Long = System.currentTimeMillis(),
+    val expiresAtEpochMs: Long = 0L,
+    val status: String = "PENDING"
 )
