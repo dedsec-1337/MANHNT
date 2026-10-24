@@ -54,6 +54,7 @@ class HapticFeedbackManager(context: Context) {
     fun triggerCatchConfirmation() = pulse(longArrayOf(0, 250), intArrayOf(0, 200))
     fun triggerJailbreakAlarm() = pulse(longArrayOf(0, 200, 100, 200, 100, 400), intArrayOf(0, 255, 0, 255, 0, 255))
     fun triggerPowerUp() = pulse(longArrayOf(0, 60, 40, 60), intArrayOf(0, 180, 0, 180))
+    fun triggerHeadStartOver() = pulse(longArrayOf(0, 300, 100, 300), intArrayOf(0, 255, 0, 255))
 
     private fun pulse(timings: LongArray, amplitudes: IntArray) {
         if (vibrator == null || !vibrator.hasVibrator()) return
