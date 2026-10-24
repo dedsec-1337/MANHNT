@@ -1,0 +1,79 @@
+name: Check
+
+on: [push, pull_request]
+
+jobs:
+  structure:
+    name: Source structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Required Kotlin sources exist
+        run: |
+          set -e
+          files=(
+            android/app/src/main/java/com/manhunt/app/viewmodel/GameViewModel.kt
+            android/app/src/main/java/com/manhunt/app/data/model/Models.kt
+            android/app/src/main/java/com/manhunt/app/data/Constants.kt
+            android/app/src/main/java/com/manhunt/app/MainActivity.kt
+            android/app/src/main/java/com/manhunt/app/util/RandomCode.kt
+            android/app/src/main/java/com/manhunt/app/util/HapticFeedbackManager.kt
+            android/app/src/main/java/com/manhunt/app/ui/components/OSMMapView.kt
+            android/app/src/main/AndroidManifest.xml
+          )
+          for f in "${files[@]}"; do
+            test -f "$f" || { echo "MISSING: $f"; exit 1; }
+            echo "OK $f"
+          done
+
+      - name: Reject placeholder / stub ViewModel
+        run: |
+          set -e
+          vm="android/app/src/main/java/com/manhunt/app/viewmodel/GameViewModel.kt"
+          if grep -q "TEMPORARY PLACEHOLDER\|SEE_ARTIFACT" "$vm"; then
+            echo "GameViewModel.kt is still a stub. Restore the full file."
+            exit 1
+          fi
+          for sym in "fun createRoom" "fun joinRoom" "fun attemptCatch" "fun activateStealth" "fun startJailbreakHold" "class GameViewModel"; do
+            grep -q "$sym" "$vm" || { echo "Missing symbol: $sym"; exit 1; }
+          done
+          open=$(grep -o '{' "$vm" | wc -l)
+          close=$(grep -o '}' "$vm" | wc -l)
+          test "$open" -eq "$close" || { echo "Unbalanced braces: $open vs $close"; exit 1; }
+          echo "ViewModel structure OK ($open braces)"
+
+      - name: Models must include jail + stealth fields
+        run: |
+          set -e
+          m="android/app/src/main/java/com/manhunt/app/data/model/Models.kt"
+          for sym in "isInJail" "isStealthActive" "jailEnabled" "CatchConfirmPayload"; do
+            grep -q "$sym" "$m" || { echo "Models missing: $sym"; exit 1; }
+          done
+          echo "Models OK"
+
+      - name: No accidental empty Kotlin files
+        run: |
+          set -e
+          find android/app/src/main/java -name "*.kt" | while read -r f; do
+            size=$(wc -c < "$f")
+            if [ "$size" -lt 40 ]; then
+              echo "Suspiciously small: $f ($size bytes)"
+              exit 1
+            fi
+          done
+          echo "File sizes OK"
+
+  shell-syntax:
+    name: Helper scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash -n on any scripts
+        run: |
+          if ls scripts/*.sh 2>/dev/null; then
+            for s in scripts/*.sh; do bash -n "$s"; done
+            echo "Shell scripts OK"
+          else
+            echo "No shell scripts to check"
+          fi
