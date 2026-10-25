@@ -22,14 +22,15 @@ class AuthTokenInterceptor : Interceptor {
                 ?: error("Firebase did not return an ID token")
         }
 
-        val originalUrl = chain.request().url
-        val authenticatedUrl = originalUrl.newBuilder()
+        // Firebase Realtime Database REST accepts ID tokens in the Authorization header.
+        // Keep credentials out of URLs, where they can leak through logs and diagnostics.
+        val authenticatedUrl = chain.request().url.newBuilder()
             .removeAllQueryParameters("auth")
-            .addQueryParameter("auth", token)
             .build()
 
         val request = chain.request().newBuilder()
             .url(authenticatedUrl)
+            .header("Authorization", "Bearer $token")
             .build()
 
         return chain.proceed(request)
