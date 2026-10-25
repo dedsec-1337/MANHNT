@@ -80,8 +80,7 @@ async function seedRoom() {
       joinInfo: {
         roomName: "Rules Test",
         joinCode: roomCode,
-        hostPlayerId: "host-uid",
-        status: "LOBBY"
+        hostPlayerId: "host-uid"
       },
       publicPlayers: {
         "host-uid": player("host-uid"),
