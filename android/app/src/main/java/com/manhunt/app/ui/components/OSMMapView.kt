@@ -13,6 +13,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.manhunt.app.data.model.Player
 import com.manhunt.app.data.model.Role
 import com.manhunt.app.data.model.SafeZone
+import com.manhunt.app.util.GeoUtils
+import com.manhunt.app.R
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
@@ -36,11 +38,21 @@ fun OSMMapView(
     jailLng: Double = 0.0,
     jailRadiusMeters: Double = 25.0,
     jailEnabled: Boolean = false,
+    headingDegrees: Float = 0f,
+    hasHeading: Boolean = false,
+    playerLocationUpdatedAtEpochMs: Long = 0L,
+    centerOnPlayer: Boolean = true,
+    showOtherPlayerLocations: Boolean = true,
+    initialZoom: Double = 17.0,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var mapViewRef by remember { mutableStateOf<MapView?>(null) }
+    val hasCenteredOnPlayer = remember(zoneCenterLat, zoneCenterLng) { booleanArrayOf(false) }
+    val lastCenteredLocationTimestamp = remember(zoneCenterLat, zoneCenterLng) {
+        longArrayOf(playerLocationUpdatedAtEpochMs)
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -67,18 +79,41 @@ fun OSMMapView(
                 setMultiTouchControls(true)
                 isTilesScaledToDpi = true
                 zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
-                controller.setZoom(17.0)
-                if (playerLat != 0.0 && playerLng != 0.0) {
-                    controller.setCenter(GeoPoint(playerLat, playerLng))
+                controller.setZoom(initialZoom)
+                val now = System.currentTimeMillis()
+                val hasFreshPlayerFix = centerOnPlayer &&
+                    GeoUtils.hasValidCoordinates(playerLat, playerLng) &&
+                    playerLocationUpdatedAtEpochMs > 0L &&
+                    now - playerLocationUpdatedAtEpochMs in 0L..15_000L
+                val initialCenter = when {
+                    hasFreshPlayerFix -> GeoPoint(playerLat, playerLng)
+                    GeoUtils.hasValidCoordinates(zoneCenterLat, zoneCenterLng) -> GeoPoint(zoneCenterLat, zoneCenterLng)
+                    else -> GeoPoint(0.0, 0.0)
                 }
+                controller.setCenter(initialCenter)
+                hasCenteredOnPlayer[0] = hasFreshPlayerFix
                 onResume()
                 mapViewRef = this
             }
         },
         update = { mapView ->
+            if (centerOnPlayer && !hasCenteredOnPlayer[0] &&
+                playerLocationUpdatedAtEpochMs > lastCenteredLocationTimestamp[0] &&
+                GeoUtils.hasValidCoordinates(playerLat, playerLng)
+            ) {
+                mapView.controller.setCenter(GeoPoint(playerLat, playerLng))
+                hasCenteredOnPlayer[0] = true
+            }
+            lastCenteredLocationTimestamp[0] = maxOf(
+                lastCenteredLocationTimestamp[0],
+                playerLocationUpdatedAtEpochMs
+            )
+
             mapView.overlays.clear()
 
-            if (!isUnlimitedZone && zoneRadiusMeters > 0 && zoneCenterLat != 0.0) {
+            if (!isUnlimitedZone && zoneRadiusMeters > 0 &&
+                GeoUtils.hasValidCoordinates(zoneCenterLat, zoneCenterLng)
+            ) {
                 val circleCenter = GeoPoint(zoneCenterLat, zoneCenterLng)
                 val circlePolygon = Polygon(mapView).apply {
                     points = Polygon.pointsAsCircle(circleCenter, zoneRadiusMeters)
@@ -103,7 +138,7 @@ fun OSMMapView(
             }
 
             for (safeZone in safeZones) {
-                if (safeZone.latitude != 0.0 && safeZone.longitude != 0.0) {
+                if (GeoUtils.hasValidCoordinates(safeZone.latitude, safeZone.longitude)) {
                     val safeCenter = GeoPoint(safeZone.latitude, safeZone.longitude)
                     val safePolygon = Polygon(mapView).apply {
                         points = Polygon.pointsAsCircle(safeCenter, safeZone.radiusMeters)
@@ -118,7 +153,7 @@ fun OSMMapView(
                 }
             }
 
-            if (jailEnabled && jailLat != 0.0 && jailLng != 0.0) {
+            if (jailEnabled && GeoUtils.hasValidCoordinates(jailLat, jailLng)) {
                 val jailCenter = GeoPoint(jailLat, jailLng)
                 val jailPolygon = Polygon(mapView).apply {
                     points = Polygon.pointsAsCircle(jailCenter, jailRadiusMeters)
@@ -132,23 +167,26 @@ fun OSMMapView(
                 mapView.overlays.add(jailPolygon)
             }
 
-            if (playerLat != 0.0 && playerLng != 0.0) {
+            if (GeoUtils.hasValidCoordinates(playerLat, playerLng)) {
                 val selfMarker = Marker(mapView).apply {
                     position = GeoPoint(playerLat, playerLng)
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     title = "You"
-                    icon = context.getDrawable(android.R.drawable.presence_online)
+                    icon = context.getDrawable(
+                        if (hasHeading) R.drawable.ic_player_heading else android.R.drawable.presence_online
+                    )
+                    if (hasHeading) setRotation(-headingDegrees)
                 }
                 mapView.overlays.add(selfMarker)
             }
 
-            if (userRole == Role.SEEKER || isAutoPingActive) {
+            if (showOtherPlayerLocations && (userRole == Role.SEEKER || isAutoPingActive)) {
                 val hiders = otherPlayers.filter {
                     it.role == Role.HIDER && !it.isCaught &&
                         !(it.isStealthActive && System.currentTimeMillis() < it.stealthUntilEpochMs)
                 }
                 for (hider in hiders) {
-                    if (hider.latitude != 0.0 && hider.longitude != 0.0) {
+                    if (GeoUtils.hasValidCoordinates(hider.latitude, hider.longitude)) {
                         val hiderMarker = Marker(mapView).apply {
                             position = GeoPoint(hider.latitude, hider.longitude)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
@@ -166,7 +204,7 @@ fun OSMMapView(
                 }
                 val jailed = otherPlayers.filter { it.role == Role.HIDER && it.isInJail }
                 for (j in jailed) {
-                    if (j.latitude != 0.0 && j.longitude != 0.0) {
+                    if (GeoUtils.hasValidCoordinates(j.latitude, j.longitude)) {
                         val m = Marker(mapView).apply {
                             position = GeoPoint(j.latitude, j.longitude)
                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
