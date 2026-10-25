@@ -77,3 +77,22 @@ jobs:
           else
             echo "No shell scripts to check"
           fi
+
+  android-build:
+    name: Android compile and debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+      - name: Install Android SDK 34
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Compile Kotlin and assemble debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:compileDebugKotlin :app:assembleDebug
