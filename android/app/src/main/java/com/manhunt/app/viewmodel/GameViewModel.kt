@@ -296,6 +296,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val submitted = firebaseSync.sendCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim()))
             if (submitted) {
                 hapticManager.triggerCatchConfirmation()
+                _uiState.update {
+                    it.copy(toastMessage = "Correct code. Waiting for ${target.name} to confirm or dispute the catch.")
+                }
                 onResult(true, "Catch submitted for confirmation")
             } else {
                 _uiState.update { it.copy(toastMessage = "Catch attempt could not sync. Check the code, connection, and room rules.") }
@@ -600,6 +603,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         val me = state.myPlayer
         val others = state.players.filter { it.id != me.id }
+        val activeHiderHeartbeat = me.role == Role.HIDER &&
+            !me.isCaught && !me.isInJail &&
+            state.session?.status == GameStatus.RUNNING &&
+            state.session?.isPaused == false
+        if (!activeHiderHeartbeat) hapticManager.stop()
         if (me.role == Role.HIDER) {
             var nearest = Double.MAX_VALUE
             var bearing = 0f
@@ -611,7 +619,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             val distance = if (nearest == Double.MAX_VALUE) -1.0 else nearest
-            if (distance >= 0.0) hapticManager.evaluateProximityHaptics(distance)
+            if (distance >= 0.0 && activeHiderHeartbeat) {
+                hapticManager.evaluateProximityHaptics(distance)
+            }
             _uiState.update { it.copy(nearestSeekerDistance = distance, nearestSeekerBearing = bearing, nearbyCatchableHider = null) }
         } else {
             val session = state.session
