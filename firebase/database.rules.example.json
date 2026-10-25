@@ -6,7 +6,17 @@
       "$joinCode": {
         ".read": false,
         ".write": "auth != null && !data.exists() && newData.child('session').child('hostPlayerId').val() === auth.uid && newData.child('session').child('joinCode').val() === $joinCode",
+        "joinInfo": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid",
+          ".validate": "newData.hasChildren(['roomName', 'joinCode', 'hostPlayerId']) && newData.child('roomName').isString() && newData.child('roomName').val().length <= 80 && newData.child('joinCode').val() === $joinCode && newData.child('hostPlayerId').val() === root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val()",
+          "roomName": { ".validate": "newData.isString() && newData.val().length <= 80" },
+          "joinCode": { ".validate": "newData.isString() && newData.val() === $joinCode" },
+          "hostPlayerId": { ".validate": "newData.isString() && newData.val() === root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val()" },
+          "$other": { ".validate": false }
+        },
         "session": {
+          ".read": "auth != null && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).exists()",
           ".write": "auth != null && data.exists() && data.child('hostPlayerId').val() === auth.uid && newData.child('hostPlayerId').val() === auth.uid",
           ".validate": "newData.hasChildren(['roomId', 'roomName', 'joinCode', 'hostPlayerId', 'status']) && newData.child('joinCode').val() === $joinCode && newData.child('hostPlayerId').isString() && (newData.child('status').val() === 'LOBBY' || newData.child('status').val() === 'RUNNING' || newData.child('status').val() === 'PAUSED' || newData.child('status').val() === 'FINISHED')",
           "roomId": {
@@ -99,7 +109,7 @@
           "$other": {
             ".validate": false
           },
-          ".read": "auth != null"
+          ".read": "auth != null && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).exists()"
         },
         "lastCatchAttempt": {
           ".write": "auth != null && newData.exists() && newData.child('seekerId').val() === auth.uid && root.child('rooms').child($joinCode).child('session').child('status').val() === 'RUNNING' && root.child('rooms').child($joinCode).child('session').child('isPaused').val() !== true && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).child('role').val() === 'SEEKER' && root.child('rooms').child($joinCode).child('publicPlayers').child(newData.child('targetHiderId').val()).child('role').val() === 'HIDER' && newData.child('targetHiderId').val() !== auth.uid && root.child('roomPrivate').child($joinCode).child('catchCodes').child(newData.child('targetHiderId').val()).val() === newData.child('enteredCode').val()",

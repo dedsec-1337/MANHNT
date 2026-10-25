@@ -77,6 +77,13 @@ data class LocationPayload(
     val lastUpdatedEpochMs: Long = System.currentTimeMillis()
 )
 
+// Safe lookup metadata only; never include exact coordinates in this public endpoint.
+data class RoomJoinInfo(
+    val roomName: String = "",
+    val joinCode: String = "",
+    val hostPlayerId: String = ""
+)
+
 data class RoomNetworkModel(
     val session: GameSession = GameSession(),
     @SerializedName("publicPlayers") val players: Map<String, Player> = emptyMap(),

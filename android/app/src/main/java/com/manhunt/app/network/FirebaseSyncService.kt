@@ -38,6 +38,17 @@ interface FirebaseRestApi {
         @Path("joinCode") joinCode: String
     ): Response<CatchConfirmPayload?>
 
+    @GET("rooms/{joinCode}/joinInfo.json")
+    suspend fun getJoinInfo(
+        @Path("joinCode") joinCode: String
+    ): Response<RoomJoinInfo?>
+
+    @PUT("rooms/{joinCode}/joinInfo.json")
+    suspend fun putJoinInfo(
+        @Path("joinCode") joinCode: String,
+        @Body joinInfo: RoomJoinInfo
+    ): Response<Void>
+
     @GET("rooms/{joinCode}/session.json")
     suspend fun getSession(
         @Path("joinCode") joinCode: String
@@ -183,9 +194,9 @@ class FirebaseSyncService private constructor() {
         }
     }
 
-    suspend fun fetchRoomSession(joinCode: String): GameSession? {
+    suspend fun fetchRoomSession(joinCode: String): RoomJoinInfo? {
         return try {
-            val response = api.getSession(joinCode)
+            val response = api.getJoinInfo(joinCode)
             if (response.isSuccessful) response.body() else null
         } catch (e: Exception) {
             Log.e(TAG, "Network error fetching room session: ${e.message}")
@@ -265,6 +276,14 @@ class FirebaseSyncService private constructor() {
                 _syncStatus.value = NetworkSyncStatus.SYNCING
                 val response = api.createRoom(room.session.joinCode, room)
                 var success = response.isSuccessful
+                if (success) {
+                    val joinInfo = RoomJoinInfo(
+                        roomName = room.session.roomName,
+                        joinCode = room.session.joinCode,
+                        hostPlayerId = room.session.hostPlayerId
+                    )
+                    success = api.putJoinInfo(room.session.joinCode, joinInfo).isSuccessful
+                }
                 if (success) {
                     room.players.values.forEach { player ->
                         val location = LocationPayload(

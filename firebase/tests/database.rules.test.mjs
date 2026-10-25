@@ -22,6 +22,10 @@ function session(hostPlayerId = "host-uid") {
     roomName: "Rules Test",
     status: "LOBBY",
     hostPlayerId,
+    zoneCenterLat: 22.5726,
+    zoneCenterLng: 88.3639,
+    jailLat: 22.5726,
+    jailLng: 88.3639,
     remainingSeconds: 600,
     isPaused: false
   };
@@ -73,6 +77,11 @@ async function seedRoom() {
     const db = context.database();
     await set(ref(db, roomPath), {
       session: session(),
+      joinInfo: {
+        roomName: "Rules Test",
+        joinCode: roomCode,
+        hostPlayerId: "host-uid"
+      },
       publicPlayers: {
         "host-uid": player("host-uid"),
         "seeker-uid": player("seeker-uid"),
@@ -135,8 +144,12 @@ test("authenticated non-members cannot read the room tree but can look up the jo
   await assertFails(get(ref(memberDb, roomPath)));
   await assertFails(get(ref(memberDb, `${roomPath}/players`)));
   await assertFails(get(ref(visitorDb, `${roomPath}/players`)));
-  const sessionSnapshot = await assertSucceeds(get(ref(visitorDb, `${roomPath}/session`)));
-  assert.equal(sessionSnapshot.val().roomName, "Rules Test");
+  await assertFails(get(ref(visitorDb, `${roomPath}/session`)));
+  const joinInfoSnapshot = await assertSucceeds(get(ref(visitorDb, `${roomPath}/joinInfo`)));
+  assert.equal(joinInfoSnapshot.val().roomName, "Rules Test");
+  assert.equal(joinInfoSnapshot.child("zoneCenterLat").val(), null);
+  const sessionSnapshot = await assertSucceeds(get(ref(memberDb, `${roomPath}/session`)));
+  assert.equal(sessionSnapshot.child("zoneCenterLat").val(), 22.5726);
   await assertSucceeds(get(ref(memberDb, `${roomPath}/publicPlayers`)));
   await assertFails(get(ref(visitorDb, `${roomPath}/publicPlayers`)));
 });
