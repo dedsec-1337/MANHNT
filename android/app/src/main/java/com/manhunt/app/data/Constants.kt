@@ -6,6 +6,8 @@ object Constants {
     const val LOCATION_UPDATE_INTERVAL_MS = 5000L
     const val FASTEST_LOCATION_INTERVAL_MS = 3000L
     const val CLOUD_SYNC_POLL_INTERVAL_MS = 2500L
+    const val MAX_LOCATION_AGE_MS = 20_000L
+    const val MAX_LOCATION_FUTURE_SKEW_MS = 5_000L
 
     const val CATCH_PROXIMITY_METERS = 10.0
 

@@ -365,6 +365,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (me.role != Role.SEEKER) { onResult(false, "Only Seekers can catch Hiders"); return }
         val s = _uiState.value.session ?: return
         if (s.status != GameStatus.RUNNING || s.isPaused || (s.headStartRemainingSeconds > 0 && me.role == Role.SEEKER)) { onResult(false, "Catch unavailable right now"); return }
+        if (!GeoUtils.hasValidCoordinates(me.latitude, me.longitude) ||
+            !GeoUtils.hasValidCoordinates(target.latitude, target.longitude) ||
+            !GeoUtils.isLocationRecent(me.lastUpdatedEpochMs) ||
+            !GeoUtils.isLocationRecent(target.lastUpdatedEpochMs)
+        ) {
+            onResult(false, "Location is updating. Try again shortly.")
+            return
+        }
         val dist = GeoUtils.distanceMeters(me.latitude, me.longitude, target.latitude, target.longitude)
         if (dist > Constants.CATCH_PROXIMITY_METERS) { onResult(false, "Too far ${dist.toInt()}m"); return }
         if (!enteredCode.trim().matches(Regex("^[0-9]{4}$"))) {
@@ -415,7 +423,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(toastMessage = "No Hiders are in jail") }
             return
         }
-        if (GeoUtils.distanceMeters(me.latitude, me.longitude, session.jailLat, session.jailLng) > session.jailRadiusMeters) {
+        if (!GeoUtils.hasValidCoordinates(me.latitude, me.longitude) ||
+            !GeoUtils.isLocationRecent(me.lastUpdatedEpochMs) ||
+            !GeoUtils.hasValidCoordinates(session.jailLat, session.jailLng) ||
+            GeoUtils.distanceMeters(me.latitude, me.longitude, session.jailLat, session.jailLng) > session.jailRadiusMeters
+        ) {
             _uiState.update { it.copy(toastMessage = "Enter jail zone") }
             return
         }
@@ -444,7 +456,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val session = initial.session ?: return
         val requester = initial.players.firstOrNull { it.id == requesterId } ?: return
         val hasPrisoners = initial.players.any { it.role == Role.HIDER && it.isInJail }
-        val inJailZone = GeoUtils.distanceMeters(requester.latitude, requester.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters
+        val inJailZone = GeoUtils.hasValidCoordinates(requester.latitude, requester.longitude) &&
+            GeoUtils.isLocationRecent(requester.lastUpdatedEpochMs) &&
+            GeoUtils.hasValidCoordinates(session.jailLat, session.jailLng) &&
+            GeoUtils.distanceMeters(requester.latitude, requester.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters
         if (session.status != GameStatus.RUNNING || session.isPaused || !session.jailEnabled ||
             requester.role != Role.HIDER || requester.isCaught || requester.isInJail ||
             requester.jailbreakHoldStartedAtEpochMs != requestedAt || !hasPrisoners || !inJailZone) {
@@ -462,6 +477,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val current = state.session ?: return@launch
                 val player = state.players.firstOrNull { it.id == requesterId }
                 val stillInZone = player != null &&
+                    GeoUtils.hasValidCoordinates(player.latitude, player.longitude) &&
+                    GeoUtils.isLocationRecent(player.lastUpdatedEpochMs) &&
+                    GeoUtils.hasValidCoordinates(current.jailLat, current.jailLng) &&
                     GeoUtils.distanceMeters(player.latitude, player.longitude, current.jailLat, current.jailLng) <= current.jailRadiusMeters
                 val valid = current.status == GameStatus.RUNNING && !current.isPaused && player != null &&
                     player.jailbreakHoldStartedAtEpochMs == requestedAt && player.role == Role.HIDER &&
@@ -567,6 +585,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         val canJailbreak = session.jailEnabled &&
             GeoUtils.hasValidCoordinates(me.latitude, me.longitude) &&
+            GeoUtils.isLocationRecent(me.lastUpdatedEpochMs) &&
             GeoUtils.hasValidCoordinates(session.jailLat, session.jailLng) &&
             me.role == Role.HIDER && !me.isCaught && !me.isInJail &&
             session.status == GameStatus.RUNNING &&
@@ -574,6 +593,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             room.players.values.any { it.role == Role.HIDER && it.isInJail }
         val huntersNearJail = room.players.values.filter { player ->
             player.role == Role.SEEKER && GeoUtils.hasValidCoordinates(player.latitude, player.longitude) &&
+                GeoUtils.isLocationRecent(player.lastUpdatedEpochMs) &&
                 GeoUtils.distanceMeters(player.latitude, player.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters * 2
         }
         _uiState.update {
@@ -682,7 +702,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             state.session.isPaused == false
         if (!activeHiderHeartbeat) hapticManager.stop()
 
-        if (!GeoUtils.hasValidCoordinates(me.latitude, me.longitude)) {
+        if (!GeoUtils.hasValidCoordinates(me.latitude, me.longitude) ||
+            !GeoUtils.isLocationRecent(me.lastUpdatedEpochMs)
+        ) {
             hapticManager.stop()
             _uiState.update {
                 it.copy(
@@ -700,7 +722,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             var bearing = 0f
             others.filter {
                 it.role == Role.SEEKER &&
-                    GeoUtils.hasValidCoordinates(it.latitude, it.longitude)
+                    GeoUtils.hasValidCoordinates(it.latitude, it.longitude) &&
+                    GeoUtils.isLocationRecent(it.lastUpdatedEpochMs)
             }.forEach { seeker ->
                 val distance = GeoUtils.distanceMeters(me.latitude, me.longitude, seeker.latitude, seeker.longitude)
                 if (distance < nearest) {
@@ -723,7 +746,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val session = state.session
             val hiders = others.filter {
                 it.role == Role.HIDER && !it.isCaught &&
-                    GeoUtils.hasValidCoordinates(it.latitude, it.longitude)
+                    GeoUtils.hasValidCoordinates(it.latitude, it.longitude) &&
+                    GeoUtils.isLocationRecent(it.lastUpdatedEpochMs)
             }
             fun isActuallyInSafeZone(player: Player): Boolean = session?.safeZones?.any { zone ->
                 GeoUtils.hasValidCoordinates(zone.latitude, zone.longitude) &&
@@ -815,7 +839,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     target.isCaught || target.isInJail || target.immunityUntilEpochMs > now ||
                     seeker.id == target.id ||
                     !GeoUtils.hasValidCoordinates(seeker.latitude, seeker.longitude) ||
-                    !GeoUtils.hasValidCoordinates(target.latitude, target.longitude)
+                    !GeoUtils.hasValidCoordinates(target.latitude, target.longitude) ||
+                    !GeoUtils.isLocationRecent(seeker.lastUpdatedEpochMs, now) ||
+                    !GeoUtils.isLocationRecent(target.lastUpdatedEpochMs, now)
                 ) {
                     lastHandledCatchAttemptTimestamp = attempt.timestamp
                     return@launch

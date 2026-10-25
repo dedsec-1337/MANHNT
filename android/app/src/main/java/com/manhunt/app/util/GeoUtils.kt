@@ -1,5 +1,6 @@
 package com.manhunt.app.util
 
+import com.manhunt.app.data.Constants
 import kotlin.math.*
 
 object GeoUtils {
@@ -14,6 +15,15 @@ object GeoUtils {
         latitude.isFinite() && longitude.isFinite() &&
             latitude in -90.0..90.0 && longitude in -180.0..180.0 &&
             (latitude != 0.0 || longitude != 0.0)
+
+    /** Returns true only while a reported GPS fix is recent and not implausibly future-dated. */
+    fun isLocationRecent(
+        lastUpdatedEpochMs: Long,
+        nowEpochMs: Long = System.currentTimeMillis()
+    ): Boolean =
+        lastUpdatedEpochMs > 0L &&
+            lastUpdatedEpochMs <= nowEpochMs + Constants.MAX_LOCATION_FUTURE_SKEW_MS &&
+            nowEpochMs - lastUpdatedEpochMs <= Constants.MAX_LOCATION_AGE_MS
 
     /**
      * Calculates distance in meters between two lat/lng coordinates using the Haversine formula.
