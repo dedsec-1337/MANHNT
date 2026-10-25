@@ -146,9 +146,9 @@ fun CatchBottomSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Confirm Catch Button
+            // Submit Catch Code Button
             ApplePrimaryButton(
-                text = "Confirm Catch",
+                text = "Submit Catch Code",
                 enabled = code.length == 4,
                 backgroundColor = AppleSeekerOrange,
                 onClick = {

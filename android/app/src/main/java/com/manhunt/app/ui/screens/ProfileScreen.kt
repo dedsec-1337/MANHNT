@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import android.widget.Toast
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,8 +45,9 @@ fun ProfileScreen(
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
-    var name by remember { mutableStateOf(state.myPlayer.name) }
-    var selectedEmoji by remember { mutableStateOf(state.myPlayer.avatarEmoji) }
+    val uriHandler = LocalUriHandler.current
+    var name by remember(state.myPlayer.id) { mutableStateOf(state.myPlayer.name) }
+    var selectedEmoji by remember(state.myPlayer.id) { mutableStateOf(state.myPlayer.avatarEmoji) }
 
     val emojiChoices = listOf("🏃", "⚡", "🦅", "🐺", "🕶", "🕵️", "🥷", "🦊", "🐆", "🎯", "🔥", "🚀")
 
@@ -204,7 +207,7 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = it.take(40) },
                     placeholder = { Text("Enter your name") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -255,6 +258,19 @@ fun ProfileScreen(
                     onClose()
                 }
             )
+
+            TextButton(
+                onClick = {
+                    try {
+                        uriHandler.openUri("https://github.com/dedsec-1337/MANHNT")
+                    } catch (_: Exception) {
+                        Toast.makeText(context, "Could not open the GitHub repository.", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Source Code")
+            }
 
             Spacer(modifier = Modifier.height(20.dp))
         }

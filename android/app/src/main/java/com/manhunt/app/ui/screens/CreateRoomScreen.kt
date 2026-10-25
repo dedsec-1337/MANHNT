@@ -103,7 +103,7 @@ fun CreateRoomScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = roomName,
-                    onValueChange = { roomName = it },
+                    onValueChange = { roomName = it.take(80) },
                     placeholder = { Text("Enter room name...") },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
