@@ -6,7 +6,18 @@
       "$joinCode": {
         ".read": false,
         ".write": "auth != null && !data.exists() && newData.child('session').child('hostPlayerId').val() === auth.uid && newData.child('session').child('joinCode').val() === $joinCode",
+        "joinInfo": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid",
+          ".validate": "newData.hasChildren(['roomName', 'joinCode', 'hostPlayerId', 'status']) && newData.child('roomName').isString() && newData.child('roomName').val().length <= 80 && newData.child('joinCode').val() === $joinCode && newData.child('hostPlayerId').val() === root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() && (newData.child('status').val() === 'LOBBY' || newData.child('status').val() === 'RUNNING' || newData.child('status').val() === 'PAUSED' || newData.child('status').val() === 'FINISHED')",
+          "roomName": { ".validate": "newData.isString() && newData.val().length <= 80" },
+          "joinCode": { ".validate": "newData.isString() && newData.val() === $joinCode" },
+          "hostPlayerId": { ".validate": "newData.isString() && newData.val() === root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val()" },
+          "status": { ".validate": "newData.isString() && (newData.val() === 'LOBBY' || newData.val() === 'RUNNING' || newData.val() === 'PAUSED' || newData.val() === 'FINISHED')" },
+          "$other": { ".validate": false }
+        },
         "session": {
+          ".read": "auth != null && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).exists()",
           ".write": "auth != null && data.exists() && data.child('hostPlayerId').val() === auth.uid && newData.child('hostPlayerId').val() === auth.uid",
           ".validate": "newData.hasChildren(['roomId', 'roomName', 'joinCode', 'hostPlayerId', 'status']) && newData.child('joinCode').val() === $joinCode && newData.child('hostPlayerId').isString() && (newData.child('status').val() === 'LOBBY' || newData.child('status').val() === 'RUNNING' || newData.child('status').val() === 'PAUSED' || newData.child('status').val() === 'FINISHED')",
           "roomId": {
