@@ -38,7 +38,6 @@ val AppleInputBackground: Color
 // Shared Accents
 val AppleAccentBlue: Color
     @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
-val AppleAccentBlueDark = Color(0xFF9BB8D0)
 val AppleSeekerOrange = Color(0xFFBC604A)
 val AppleHiderPurple = Color(0xFF8474A3)
 val AppleHiderGreen = Color(0xFF34C759)

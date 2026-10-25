@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,6 +41,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -46,6 +50,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.manhunt.app.data.local.MatchHistoryEntity
+import com.manhunt.app.R
 import com.manhunt.app.ui.components.ApplePrimaryButton
 import com.manhunt.app.ui.components.AppleSecondaryButton
 import com.manhunt.app.ui.components.MatchRecapSheet
@@ -53,6 +58,7 @@ import com.manhunt.app.ui.components.formatDuration
 import com.manhunt.app.ui.components.formatMatchDate
 import com.manhunt.app.ui.theme.AppleTextPrimary
 import com.manhunt.app.ui.theme.AppleTextSecondary
+import com.manhunt.app.ui.theme.AppleBackgroundDark
 import com.manhunt.app.ui.theme.MotionTokens
 import com.manhunt.app.viewmodel.GameUiState
 
@@ -86,12 +92,17 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            "MANHNT",
-                            fontSize = 27.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.5.sp,
-                            color = AppleTextPrimary
+                        Image(
+                            painter = painterResource(
+                                if (colors.background == AppleBackgroundDark) {
+                                    R.drawable.manhnt_wordmark_dark
+                                } else {
+                                    R.drawable.manhnt_wordmark_light
+                                }
+                            ),
+                            contentDescription = "MANHNT logo",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.width(160.dp).height(24.dp)
                         )
                         Text("QUIET FIELD GUIDE", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.6.sp, color = AppleTextSecondary)
                     }

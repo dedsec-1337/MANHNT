@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -53,8 +54,17 @@ fun ApplePrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     backgroundColor: Color = AppleAccentBlue,
-    contentColor: Color = MaterialTheme.colorScheme.onPrimary
+    contentColor: Color? = null
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val resolvedContentColor = contentColor ?: if (backgroundColor == colorScheme.primary) {
+        colorScheme.onPrimary
+    } else if (backgroundColor.luminance() > 0.179f) {
+        Color.Black
+    } else {
+        Color.White
+    }
+
     Button(
         onClick = onClick,
         enabled = enabled,
@@ -64,7 +74,7 @@ fun ApplePrimaryButton(
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = backgroundColor,
-            contentColor = contentColor,
+            contentColor = resolvedContentColor,
             disabledContainerColor = AppleDivider,
             disabledContentColor = AppleTextSecondary
         ),

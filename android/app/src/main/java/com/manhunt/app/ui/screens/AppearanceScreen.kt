@@ -1,7 +1,10 @@
 package com.manhunt.app.ui.screens
 
 import android.widget.Toast
+import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,7 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -30,9 +35,13 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +51,8 @@ import com.manhunt.app.data.model.AccentMode
 import com.manhunt.app.data.model.AppearanceMode
 import com.manhunt.app.data.model.AppearanceSettings
 import com.manhunt.app.util.BatteryOptimizationHelper
+import com.manhunt.app.ui.theme.AccentPalettes
+import com.manhunt.app.ui.theme.AppleBackgroundDark
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +67,14 @@ fun AppearanceScreen(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val colors = MaterialTheme.colorScheme
+    val darkTheme = colors.background == AppleBackgroundDark
+    val systemAccentPreview = remember(context, darkTheme) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)).primary
+        } else {
+            AccentPalettes.previewColor(AccentMode.DEFAULT, darkTheme)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -122,16 +141,40 @@ fun AppearanceScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("Accent", fontWeight = FontWeight.SemiBold, color = colors.onSurface)
-                    AccentMode.entries.forEach { accent ->
-                        FilterChip(
-                            selected = settings.accent == accent,
-                            onClick = { onAccentModeChange(accent) },
-                            label = { Text(accent.label()) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = colors.primary.copy(alpha = 0.14f),
-                                selectedLabelColor = colors.primary
-                            )
-                        )
+                    AccentMode.entries.chunked(2).forEach { rowAccents ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowAccents.forEach { accent ->
+                                val swatch = if (accent == AccentMode.SYSTEM_COLORS) {
+                                    systemAccentPreview
+                                } else {
+                                    AccentPalettes.previewColor(accent, darkTheme)
+                                }
+                                FilterChip(
+                                    modifier = Modifier.weight(1f),
+                                    selected = settings.accent == accent,
+                                    onClick = { onAccentModeChange(accent) },
+                                    leadingIcon = {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(12.dp)
+                                                .clip(CircleShape)
+                                                .background(swatch)
+                                        )
+                                    },
+                                    label = { Text(accent.label(), maxLines = 1) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = swatch.copy(alpha = 0.14f),
+                                        selectedLabelColor = colors.primary
+                                    )
+                                )
+                            }
+                            if (rowAccents.size == 1) {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
                     }
                     if (settings.accent == AccentMode.SYSTEM_COLORS) {
                         Text(
@@ -261,5 +304,10 @@ private fun AppearanceMode.label(): String = when (this) {
 private fun AccentMode.label(): String = when (this) {
     AccentMode.DEFAULT -> "Default"
     AccentMode.BLUE -> "Blue"
+    AccentMode.TEAL -> "Teal"
+    AccentMode.VIOLET -> "Violet"
+    AccentMode.FOREST -> "Forest"
+    AccentMode.ROSE -> "Rose"
+    AccentMode.AMBER -> "Amber"
     AccentMode.SYSTEM_COLORS -> "System colors"
 }

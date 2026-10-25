@@ -9,6 +9,11 @@ enum class AppearanceMode {
 enum class AccentMode {
     DEFAULT,
     BLUE,
+    TEAL,
+    VIOLET,
+    FOREST,
+    ROSE,
+    AMBER,
     SYSTEM_COLORS
 }
 
