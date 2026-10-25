@@ -37,7 +37,7 @@ fun ResultsScreen(
     } else {
         "All hiders were hunted down and tagged."
     }
-    val winColor = if (isHiderWin) AppleHiderGreen else AppleSeekerOrange
+    val winColor = if (isHiderWin) AppleHiderPurple else AppleSeekerOrange
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background

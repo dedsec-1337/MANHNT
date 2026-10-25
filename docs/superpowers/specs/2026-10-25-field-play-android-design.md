@@ -45,7 +45,7 @@ Bring the “Field Play / Revised Edition” mobile design into MANHNT’s nativ
 
 Use a selected top-level tab separate from the existing transient screen flow. Hunt shows Basecamp while no match is active and the live game view while a match is active. Crew opens the existing Lobby when a room exists; without a room it returns to Basecamp’s existing create/join entry points, since the repository has no standalone crew browser. You retains profile editing. Settings owns the new Appearance view and the existing background-GPS protection controls. Create Room and Results remain full-screen flows.
 
-Changing tabs must not leave a room, stop Firebase sync, or stop location tracking. Returning to Hunt during an active match returns to the player’s role-specific game view. Ordinary status updates must not force the user away from another selected tab. When a match becomes `FINISHED`, Results immediately opens over the selected tab and the location service stops, preserving the current app behavior. Starting or joining a match selects Hunt and opens the live game view.
+Changing tabs must not leave a room, stop Firebase sync, or stop location tracking. Creating or joining a lobby opens Crew; the transition to a running match selects Hunt. Returning to Hunt during an active match returns to the player’s role-specific game view. Ordinary status updates must not force the user away from another selected tab. When a match becomes `FINISHED`, Results immediately opens over the selected tab and the location service stops, preserving the current app behavior.
 
 ### Basecamp
 

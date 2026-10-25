@@ -53,7 +53,7 @@ fun ApplePrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     backgroundColor: Color = AppleAccentBlue,
-    contentColor: Color = Color.White
+    contentColor: Color = MaterialTheme.colorScheme.onPrimary
 ) {
     Button(
         onClick = onClick,
@@ -111,7 +111,7 @@ fun AppleChip(
     modifier: Modifier = Modifier
 ) {
     val bg = if (isSelected) AppleAccentBlue else AppleFill
-    val textColor = if (isSelected) Color.White else AppleTextPrimary
+    val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else AppleTextPrimary
 
     Surface(
         modifier = modifier
@@ -139,14 +139,13 @@ fun RoleBadge(
     role: Role,
     modifier: Modifier = Modifier
 ) {
-    val (bg, label) = when (role) {
-        Role.SEEKER -> Pair(Color(0xFFFF9500).copy(alpha = 0.15f), "SEEKER")
-        Role.HIDER -> Pair(Color(0xFF34C759).copy(alpha = 0.15f), "HIDER")
+    val roleColor = when (role) {
+        Role.SEEKER -> AppleSeekerOrange
+        Role.HIDER -> AppleHiderPurple
     }
-    val textColor = when (role) {
-        Role.SEEKER -> Color(0xFFD97706)
-        Role.HIDER -> Color(0xFF16A34A)
-    }
+    val label = if (role == Role.SEEKER) "SEEKER" else "HIDER"
+    val bg = roleColor.copy(alpha = 0.15f)
+    val textColor = roleColor
 
     Box(
         modifier = modifier

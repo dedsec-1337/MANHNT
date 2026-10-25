@@ -34,6 +34,7 @@ import java.util.UUID
 
 data class GameUiState(
     val myPlayer: Player = Player(id = UUID.randomUUID().toString(), name = "Runner", avatarEmoji = "🏃"),
+    val latestMatch: MatchHistoryEntity? = null,
     val session: GameSession? = null,
     val players: List<Player> = emptyList(),
     val roomSignals: Map<String, GameSignalPayload> = emptyMap(),
@@ -47,7 +48,7 @@ data class GameUiState(
     val geofenceStatus: GeofenceStatus = GeofenceStatus.INSIDE,
     val geofenceGraceSeconds: Int = 30,
     val geofenceMessage: String? = null,
-    val isDarkMode: Boolean = false,
+    val appearanceSettings: AppearanceSettings = AppearanceSettings(),
     val isBatteryOptimizationExempt: Boolean = false,
     val toastMessage: String? = null,
     val networkStatus: NetworkSyncStatus = NetworkSyncStatus.ONLINE,
@@ -73,6 +74,9 @@ data class GameUiState(
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         const val PREFERENCE_DARK_MODE = "is_dark_mode"
+        const val PREFERENCE_APPEARANCE_MODE = "appearance_mode"
+        const val PREFERENCE_ACCENT_MODE = "accent_mode"
+        const val PREFERENCE_HIGH_REFRESH_RATE = "high_refresh_rate_enabled"
     }
 
     private val db = (application as ManhuntApp).database
@@ -81,7 +85,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val hapticManager = HapticFeedbackManager(application)
     private val settingsPreferences = application.getSharedPreferences("manhunt_settings", Context.MODE_PRIVATE)
     private val _uiState = MutableStateFlow(
-        GameUiState(isDarkMode = settingsPreferences.getBoolean(PREFERENCE_DARK_MODE, false))
+        GameUiState(appearanceSettings = loadAppearanceSettings())
     )
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
     private var countdownTimerJob: Job? = null
@@ -96,6 +100,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val handledStealthExpiries = mutableMapOf<String, Long>()
 
     init {
+        viewModelScope.launch {
+            db.matchHistoryDao().getAllMatchesFlow().collect { matches ->
+                _uiState.update { it.copy(latestMatch = matches.firstOrNull()) }
+            }
+        }
+
         viewModelScope.launch {
             try {
                 val uid = ensureFirebasePlayerIdentity().id
@@ -556,10 +566,49 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleDarkMode() {
-        val darkModeEnabled = !_uiState.value.isDarkMode
-        settingsPreferences.edit().putBoolean(PREFERENCE_DARK_MODE, darkModeEnabled).apply()
-        _uiState.update { it.copy(isDarkMode = darkModeEnabled) }
+    private fun loadAppearanceSettings(): AppearanceSettings {
+        val storedMode = settingsPreferences.getString(PREFERENCE_APPEARANCE_MODE, null)
+        val hasLegacyMode = settingsPreferences.contains(PREFERENCE_DARK_MODE)
+        val legacyMode = if (settingsPreferences.getBoolean(PREFERENCE_DARK_MODE, false)) {
+            AppearanceMode.OLED
+        } else {
+            AppearanceMode.LIGHT
+        }
+        val mode = storedMode?.let { value ->
+            AppearanceMode.values().firstOrNull { it.name == value }
+        } ?: if (hasLegacyMode) legacyMode else AppearanceMode.FOLLOW_DEVICE
+        val accent = settingsPreferences.getString(PREFERENCE_ACCENT_MODE, null)?.let { value ->
+            AccentMode.values().firstOrNull { it.name == value }
+        } ?: AccentMode.DEFAULT
+        val highRefreshRateEnabled = settingsPreferences.getBoolean(PREFERENCE_HIGH_REFRESH_RATE, false)
+
+        settingsPreferences.edit()
+            .putString(PREFERENCE_APPEARANCE_MODE, mode.name)
+            .putString(PREFERENCE_ACCENT_MODE, accent.name)
+            .apply()
+
+        return AppearanceSettings(
+            mode = mode,
+            accent = accent,
+            highRefreshRateEnabled = highRefreshRateEnabled
+        )
+    }
+
+    fun setAppearanceMode(mode: AppearanceMode) {
+        settingsPreferences.edit().putString(PREFERENCE_APPEARANCE_MODE, mode.name).apply()
+        _uiState.update { it.copy(appearanceSettings = it.appearanceSettings.copy(mode = mode)) }
+    }
+
+    fun setAccentMode(accent: AccentMode) {
+        settingsPreferences.edit().putString(PREFERENCE_ACCENT_MODE, accent.name).apply()
+        _uiState.update { it.copy(appearanceSettings = it.appearanceSettings.copy(accent = accent)) }
+    }
+
+    fun setHighRefreshRateEnabled(enabled: Boolean) {
+        settingsPreferences.edit().putBoolean(PREFERENCE_HIGH_REFRESH_RATE, enabled).apply()
+        _uiState.update {
+            it.copy(appearanceSettings = it.appearanceSettings.copy(highRefreshRateEnabled = enabled))
+        }
     }
     fun refreshBatteryOptimizationStatus() {
         val app = getApplication<Application>()
@@ -599,7 +648,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (!sent) {
                 lastQuickSignalSentAtEpochMs = 0L
                 _uiState.update {
-                    it.copy(toastMessage = "Signal could not sync. Check your connection and ask the host to update the Firebase rules if this continues.")
+                    it.copy(toastMessage = "Signal could not sync. Check your connection and try again.")
                 }
             }
         }

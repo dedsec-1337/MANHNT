@@ -3,6 +3,9 @@ package com.manhunt.app.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -26,6 +29,7 @@ import com.manhunt.app.data.model.Role
 import com.manhunt.app.ui.components.*
 import com.manhunt.app.ui.theme.*
 import com.manhunt.app.viewmodel.GameUiState
+import kotlinx.coroutines.delay
 
 
 private data class QuickSignalOption(
@@ -58,13 +62,28 @@ fun GameScreen(
     onActivateStealth: () -> Unit,
     onStartJailbreak: () -> Unit,
     onSendQuickSignal: (String) -> Unit,
-    onLeaveGame: () -> Unit
+    onLeaveGame: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val session = state.session ?: return
     var showCatchSheetForHider by remember { mutableStateOf<Player?>(null) }
     var showLeaveConfirmDialog by remember { mutableStateOf(false) }
     var showReactionMenu by remember { mutableStateOf(false) }
     var showQuickChatSheet by remember { mutableStateOf(false) }
+    var isCatchCodeRevealed by remember(state.myPlayer.id) { mutableStateOf(false) }
+    var recentSignalFeedback by remember { mutableStateOf<String?>(null) }
+
+    fun sendSignal(option: QuickSignalOption) {
+        onSendQuickSignal(option.code)
+        recentSignalFeedback = option.emoji + "  " + option.text
+    }
+
+    LaunchedEffect(recentSignalFeedback) {
+        if (recentSignalFeedback != null) {
+            delay(1600)
+            recentSignalFeedback = null
+        }
+    }
 
     val latestSignal = state.roomSignals.maxByOrNull { it.value.timestampEpochMs }
     val signalAgeMs = latestSignal?.let { System.currentTimeMillis() - it.value.timestampEpochMs }
@@ -88,24 +107,27 @@ fun GameScreen(
     val headStartSecs = state.headStartCountdownSeconds % 60
     val headStartTimerText = String.format("%02d:%02d", headStartMins, headStartSecs)
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Background OSMDroid Map with Geofences, Buffer, Safe Zones, and Markers
-        OSMMapView(
-            playerLat = state.myPlayer.latitude,
-            playerLng = state.myPlayer.longitude,
-            userRole = state.myPlayer.role,
-            zoneCenterLat = session.zoneCenterLat,
-            zoneCenterLng = session.zoneCenterLng,
-            zoneRadiusMeters = state.currentDynamicRadiusMeters,
-            isUnlimitedZone = session.isUnlimitedZone,
-            safeZones = session.safeZones,
-            isAutoPingActive = state.isAutoPingActive,
-            otherPlayers = state.players.filter { it.id != state.myPlayer.id },
-            headingDegrees = state.headingDegrees,
-            hasHeading = state.hasCompassHeading,
-            playerLocationUpdatedAtEpochMs = state.myPlayer.lastUpdatedEpochMs,
-            modifier = Modifier.fillMaxSize()
-        )
+    Box(modifier = modifier.fillMaxSize()) {
+        if (state.myPlayer.role == Role.SEEKER) {
+            OSMMapView(
+                playerLat = state.myPlayer.latitude,
+                playerLng = state.myPlayer.longitude,
+                userRole = state.myPlayer.role,
+                zoneCenterLat = session.zoneCenterLat,
+                zoneCenterLng = session.zoneCenterLng,
+                zoneRadiusMeters = state.currentDynamicRadiusMeters,
+                isUnlimitedZone = session.isUnlimitedZone,
+                safeZones = session.safeZones,
+                isAutoPingActive = state.isAutoPingActive,
+                otherPlayers = state.players.filter { it.id != state.myPlayer.id },
+                headingDegrees = state.headingDegrees,
+                hasHeading = state.hasCompassHeading,
+                playerLocationUpdatedAtEpochMs = state.myPlayer.lastUpdatedEpochMs,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+        }
 
         // 2. Top Header HUD Card & Notification Stack
         Column(
@@ -115,6 +137,13 @@ fun GameScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            Text(
+                text = if (state.myPlayer.role == Role.HIDER) "HIDE & SURVIVE" else "LIVE HUNT",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = AppleCardBackground.copy(alpha = 0.96f),
@@ -486,7 +515,6 @@ fun GameScreen(
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -544,13 +572,26 @@ fun GameScreen(
                                 )
                             }
 
-                            Text(
-                                text = state.myPlayer.catchCode.ifEmpty { "----" },
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 2.sp,
-                                color = AppleTextPrimary
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (isCatchCodeRevealed) state.myPlayer.catchCode.ifEmpty { "----" } else "••••",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 2.sp,
+                                    color = AppleTextPrimary
+                                )
+                                IconButton(
+                                    onClick = { isCatchCodeRevealed = !isCatchCodeRevealed },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isCatchCodeRevealed) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = if (isCatchCodeRevealed) "Hide catch code" else "Reveal catch code",
+                                        tint = AppleTextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -569,7 +610,7 @@ fun GameScreen(
                 ApplePrimaryButton(
                     text = stealthText,
                     enabled = isFree && !session.isPaused && !state.isStealthActive && state.stealthCooldownSeconds <= 0,
-                    backgroundColor = Color(0xFF6366F1),
+                    backgroundColor = AppleHiderPurple,
                     onClick = onActivateStealth
                 )
 
@@ -577,7 +618,7 @@ fun GameScreen(
                     ApplePrimaryButton(
                         text = if (session.isJailbreakInProgress) "Jailbreak in progress (${session.jailbreakProgressSeconds}s)" else "Start Jailbreak",
                         enabled = !session.isPaused && !session.isJailbreakInProgress,
-                        backgroundColor = AppleHiderGreen,
+                        backgroundColor = AppleHiderPurple,
                         onClick = onStartJailbreak
                     )
                 }
@@ -650,7 +691,7 @@ fun GameScreen(
                                     text = { Text("${option.emoji}  ${option.text}") },
                                     onClick = {
                                         showReactionMenu = false
-                                        onSendQuickSignal(option.code)
+                                        sendSignal(option)
                                     }
                                 )
                             }
@@ -714,7 +755,7 @@ fun GameScreen(
                         Button(
                             onClick = {
                                 showQuickChatSheet = false
-                                onSendQuickSignal(option.code)
+                                sendSignal(option)
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(14.dp),
@@ -732,6 +773,27 @@ fun GameScreen(
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                 }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = recentSignalFeedback != null,
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 92.dp),
+            enter = fadeIn(tween(MotionTokens.FeedbackMillis)) + slideInVertically(tween(MotionTokens.FeedbackMillis)) { it / 2 },
+            exit = fadeOut(tween(MotionTokens.FeedbackMillis)) + slideOutVertically(tween(MotionTokens.FeedbackMillis)) { it / 2 }
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                shadowElevation = 6.dp
+            ) {
+                Text(
+                    text = recentSignalFeedback.orEmpty(),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
 
