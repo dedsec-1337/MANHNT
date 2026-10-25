@@ -167,7 +167,9 @@ fun OSMMapView(
                 mapView.overlays.add(jailPolygon)
             }
 
-            if (GeoUtils.hasValidCoordinates(playerLat, playerLng)) {
+            if (GeoUtils.hasValidCoordinates(playerLat, playerLng) &&
+                GeoUtils.isLocationRecent(playerLocationUpdatedAtEpochMs)
+            ) {
                 val selfMarker = Marker(mapView).apply {
                     position = GeoPoint(playerLat, playerLng)
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
@@ -183,6 +185,7 @@ fun OSMMapView(
             if (showOtherPlayerLocations && (userRole == Role.SEEKER || isAutoPingActive)) {
                 val hiders = otherPlayers.filter {
                     it.role == Role.HIDER && !it.isCaught &&
+                        GeoUtils.isLocationRecent(it.lastUpdatedEpochMs) &&
                         !(it.isStealthActive && System.currentTimeMillis() < it.stealthUntilEpochMs)
                 }
                 for (hider in hiders) {
@@ -202,7 +205,9 @@ fun OSMMapView(
                         mapView.overlays.add(hiderMarker)
                     }
                 }
-                val jailed = otherPlayers.filter { it.role == Role.HIDER && it.isInJail }
+                val jailed = otherPlayers.filter {
+                    it.role == Role.HIDER && it.isInJail && GeoUtils.isLocationRecent(it.lastUpdatedEpochMs)
+                }
                 for (j in jailed) {
                     if (GeoUtils.hasValidCoordinates(j.latitude, j.longitude)) {
                         val m = Marker(mapView).apply {
