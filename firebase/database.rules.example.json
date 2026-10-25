@@ -16,7 +16,6 @@
           "$other": { ".validate": false }
         },
         "session": {
-          ".read": "auth != null && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).exists()",
           ".write": "auth != null && data.exists() && data.child('hostPlayerId').val() === auth.uid && newData.child('hostPlayerId').val() === auth.uid",
           ".validate": "newData.hasChildren(['roomId', 'roomName', 'joinCode', 'hostPlayerId', 'status']) && newData.child('joinCode').val() === $joinCode && newData.child('hostPlayerId').isString() && (newData.child('status').val() === 'LOBBY' || newData.child('status').val() === 'RUNNING' || newData.child('status').val() === 'PAUSED' || newData.child('status').val() === 'FINISHED')",
           "roomId": {
