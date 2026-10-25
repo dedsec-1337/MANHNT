@@ -19,12 +19,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.manhunt.app.data.Constants
 import com.manhunt.app.data.model.NetworkSyncStatus
 import com.manhunt.app.data.model.Player
 import com.manhunt.app.data.model.Role
 import com.manhunt.app.ui.components.*
 import com.manhunt.app.ui.theme.*
 import com.manhunt.app.viewmodel.GameUiState
+
+
+private data class QuickSignalOption(
+    val code: String,
+    val emoji: String,
+    val text: String
+)
+
+private val REACTION_OPTIONS = listOf(
+    QuickSignalOption("R_LAUGH", "😂", "Laugh"),
+    QuickSignalOption("R_EYES", "👀", "Eyes on you"),
+    QuickSignalOption("R_CLAP", "👏", "Clap"),
+    QuickSignalOption("R_FIRE", "🔥", "Let's go!")
+)
+
+private val QUICK_CHAT_OPTIONS = listOf(
+    QuickSignalOption("P_CATCH_ME", "🏃", "Catch me if you can!"),
+    QuickSignalOption("P_CLOSE_CALL", "😅", "That was close!"),
+    QuickSignalOption("P_WARMER", "👀", "You're getting warmer…"),
+    QuickSignalOption("P_NEED_RESCUE", "🆘", "Need a rescue!"),
+    QuickSignalOption("P_GG", "🏁", "GG — nice chase!")
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,11 +57,27 @@ fun GameScreen(
     onAttemptCatch: (targetHiderId: String, code: String) -> Unit,
     onActivateStealth: () -> Unit,
     onStartJailbreak: () -> Unit,
+    onSendQuickSignal: (String) -> Unit,
     onLeaveGame: () -> Unit
 ) {
     val session = state.session ?: return
     var showCatchSheetForHider by remember { mutableStateOf<Player?>(null) }
     var showLeaveConfirmDialog by remember { mutableStateOf(false) }
+    var showReactionMenu by remember { mutableStateOf(false) }
+    var showQuickChatSheet by remember { mutableStateOf(false) }
+
+    val latestSignal = state.roomSignals.maxByOrNull { it.value.timestampEpochMs }
+    val signalAgeMs = latestSignal?.let { System.currentTimeMillis() - it.value.timestampEpochMs }
+    val activeSignal = latestSignal?.takeIf {
+        signalAgeMs != null && signalAgeMs in -Constants.GAME_SIGNAL_MAX_FUTURE_SKEW_MS..Constants.GAME_SIGNAL_MAX_AGE_MS
+    }
+    val signalOption = activeSignal?.value?.code?.let { code ->
+        (REACTION_OPTIONS + QUICK_CHAT_OPTIONS).firstOrNull { it.code == code }
+    }
+    val signalSenderName = activeSignal?.key?.let { playerId ->
+        state.players.firstOrNull { it.id == playerId }?.name
+    } ?: "Player"
+    val canSendSignals = session.status == com.manhunt.app.data.model.GameStatus.RUNNING && !session.isPaused
 
     val remaining = session.remainingSeconds
     val mins = remaining / 60
@@ -334,6 +373,39 @@ fun GameScreen(
                     }
                 }
             }
+
+            if (activeSignal != null && signalOption != null) {
+                AnimatedVisibility(visible = true, enter = fadeIn(), exit = fadeOut()) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = AppleCardBackground.copy(alpha = 0.97f),
+                        shadowElevation = 5.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                        ) {
+                            Text(text = signalOption.emoji, fontSize = 19.sp)
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text(
+                                    text = signalSenderName,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AppleTextSecondary
+                                )
+                                Text(
+                                    text = signalOption.text,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AppleTextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // 3. SEEKER FROZEN OVERLAY (During Head Start)
@@ -535,16 +607,72 @@ fun GameScreen(
                 )
             }
 
-            // Leave Game Button (Subtle)
-            TextButton(
-                onClick = { showLeaveConfirmDialog = true },
-                modifier = Modifier.align(Alignment.CenterHorizontally)
+            // Compact quick reactions and preset chat share the existing footer row.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Leave Chase",
-                    fontSize = 13.sp,
-                    color = AppleTextSecondary
-                )
+                TextButton(
+                    onClick = { showLeaveConfirmDialog = true },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Leave Chase",
+                        fontSize = 13.sp,
+                        color = AppleTextSecondary
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box {
+                        IconButton(
+                            onClick = { showReactionMenu = true },
+                            enabled = canSendSignals,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(AppleCardBackground.copy(alpha = 0.96f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEmotions,
+                                contentDescription = "Send a reaction",
+                                tint = AppleTextPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showReactionMenu,
+                            onDismissRequest = { showReactionMenu = false }
+                        ) {
+                            REACTION_OPTIONS.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text("${option.emoji}  ${option.text}") },
+                                    onClick = {
+                                        showReactionMenu = false
+                                        onSendQuickSignal(option.code)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    IconButton(
+                        onClick = { showQuickChatSheet = true },
+                        enabled = canSendSignals,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(AppleCardBackground.copy(alpha = 0.96f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ChatBubbleOutline,
+                            contentDescription = "Open preset chat",
+                            tint = AppleAccentBlue,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
         }
 
@@ -558,6 +686,53 @@ fun GameScreen(
                     onAttemptCatch(hider.id, enteredPin)
                 }
             )
+        }
+
+        if (showQuickChatSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showQuickChatSheet = false },
+                containerColor = AppleCardBackground
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Quick chat",
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppleTextPrimary
+                    )
+                    Text(
+                        text = "Preset messages only — typing is off.",
+                        fontSize = 13.sp,
+                        color = AppleTextSecondary
+                    )
+                    QUICK_CHAT_OPTIONS.forEach { option ->
+                        Button(
+                            onClick = {
+                                showQuickChatSheet = false
+                                onSendQuickSignal(option.code)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AppleFill,
+                                contentColor = AppleTextPrimary
+                            )
+                        ) {
+                            Text(
+                                text = "${option.emoji}  ${option.text}",
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Start
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
         }
 
         // Leave Confirmation Dialog

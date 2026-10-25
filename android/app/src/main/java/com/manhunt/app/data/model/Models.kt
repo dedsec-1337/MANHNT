@@ -107,3 +107,29 @@ data class CatchConfirmPayload(
     val expiresAtEpochMs: Long = 0L,
     val status: String = "PENDING"
 )
+
+data class GameSignalPayload(
+    val code: String = "",
+    val timestampEpochMs: Long = 0L
+)
+
+object GameSignalCode {
+    const val REACTION_LAUGH = "R_LAUGH"
+    const val REACTION_EYES = "R_EYES"
+    const val REACTION_CLAP = "R_CLAP"
+    const val REACTION_FIRE = "R_FIRE"
+    const val PHRASE_CATCH_ME = "P_CATCH_ME"
+    const val PHRASE_CLOSE_CALL = "P_CLOSE_CALL"
+    const val PHRASE_WARMER = "P_WARMER"
+    const val PHRASE_NEED_RESCUE = "P_NEED_RESCUE"
+    const val PHRASE_GG = "P_GG"
+
+    const val MAX_AGE_MS = 15_000L
+    const val MAX_FUTURE_SKEW_MS = 5_000L
+    const val SEND_COOLDOWN_MS = 1_500L
+
+    val allowedCodes = setOf(
+        REACTION_LAUGH, REACTION_EYES, REACTION_CLAP, REACTION_FIRE,
+        PHRASE_CATCH_ME, PHRASE_CLOSE_CALL, PHRASE_WARMER, PHRASE_NEED_RESCUE, PHRASE_GG
+    )
+)

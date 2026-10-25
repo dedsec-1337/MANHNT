@@ -131,6 +131,24 @@ interface FirebaseRestApi {
     suspend fun deletePendingCatchConfirm(
         @Path("joinCode") joinCode: String
     ): Response<Void>
+
+    @GET("roomSignals/{joinCode}.json")
+    suspend fun getGameSignals(
+        @Path("joinCode") joinCode: String
+    ): Response<Map<String, GameSignalPayload>?>
+
+    @PUT("roomSignals/{joinCode}/{playerId}.json")
+    suspend fun putGameSignal(
+        @Path("joinCode") joinCode: String,
+        @Path("playerId") playerId: String,
+        @Body signal: GameSignalPayload
+    ): Response<Void>
+
+    @DELETE("roomSignals/{joinCode}/{playerId}.json")
+    suspend fun deleteGameSignal(
+        @Path("joinCode") joinCode: String,
+        @Path("playerId") playerId: String
+    ): Response<Void>
 }
 
 class FirebaseSyncService private constructor() {
@@ -145,6 +163,9 @@ class FirebaseSyncService private constructor() {
 
     private val _roomState = MutableStateFlow<RoomNetworkModel?>(null)
     val roomState: StateFlow<RoomNetworkModel?> = _roomState.asStateFlow()
+
+    private val _roomSignals = MutableStateFlow<Map<String, GameSignalPayload>>(emptyMap())
+    val roomSignals: StateFlow<Map<String, GameSignalPayload>> = _roomSignals.asStateFlow()
 
     private var pollingJob: Job? = null
     private var activeJoinCode: String? = null
@@ -241,6 +262,18 @@ class FirebaseSyncService private constructor() {
             }
             val lastCatchResponse = api.getLastCatchAttempt(joinCode)
             val pendingResponse = api.getPendingCatchConfirm(joinCode)
+            val signalsResponse = api.getGameSignals(joinCode)
+            val nowEpochMs = System.currentTimeMillis()
+            val activeSignals = if (signalsResponse.isSuccessful) {
+                signalsResponse.body().orEmpty().filterValues { signal ->
+                    signal.code in GameSignalCode.allowedCodes &&
+                        signal.timestampEpochMs > 0L &&
+                        signal.timestampEpochMs <= nowEpochMs + Constants.GAME_SIGNAL_MAX_FUTURE_SKEW_MS &&
+                        nowEpochMs - signal.timestampEpochMs <= Constants.GAME_SIGNAL_MAX_AGE_MS
+                }
+            } else {
+                emptyMap()
+            }
             val mergedPlayers = publicPlayers.mapValues { (playerId, player) ->
                 val location = locations[playerId]
                 player.copy(
@@ -258,6 +291,7 @@ class FirebaseSyncService private constructor() {
                 pendingCatchConfirm = if (pendingResponse.isSuccessful) pendingResponse.body() else null
             )
             _syncStatus.value = NetworkSyncStatus.ONLINE
+            _roomSignals.value = activeSignals
             _roomState.value = merged
             merged
         } catch (e: Exception) {
@@ -414,6 +448,32 @@ class FirebaseSyncService private constructor() {
         }
     }
 
+    suspend fun sendQuickSignal(
+        joinCode: String,
+        playerId: String,
+        signal: GameSignalPayload
+    ): Boolean {
+        val nowEpochMs = System.currentTimeMillis()
+        if (signal.code !in GameSignalCode.allowedCodes ||
+            signal.timestampEpochMs <= 0L ||
+            signal.timestampEpochMs > nowEpochMs + Constants.GAME_SIGNAL_MAX_FUTURE_SKEW_MS ||
+            nowEpochMs - signal.timestampEpochMs > Constants.GAME_SIGNAL_MAX_AGE_MS
+        ) return false
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.putGameSignal(joinCode, playerId, signal)
+                if (response.isSuccessful) {
+                    _roomSignals.value = _roomSignals.value + (playerId to signal)
+                }
+                response.isSuccessful
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send quick signal: ${e.message}")
+                false
+            }
+        }
+    }
+
     suspend fun createPendingCatchConfirm(joinCode: String, payload: CatchConfirmPayload): Boolean {
         return withContext(Dispatchers.IO) {
             try {
@@ -454,6 +514,9 @@ class FirebaseSyncService private constructor() {
     suspend fun leaveRoom(joinCode: String, playerId: String) {
         withContext(Dispatchers.IO) {
             try {
+                api.deleteGameSignal(joinCode, playerId)
+            } catch (ignored: Exception) {}
+            try {
                 api.deletePlayer(joinCode, playerId)
             } catch (ignored: Exception) {}
         }
@@ -464,6 +527,7 @@ class FirebaseSyncService private constructor() {
         pollingJob?.cancel()
         activeJoinCode = null
         _roomState.value = null
+        _roomSignals.value = emptyMap()
     }
 
     companion object {
