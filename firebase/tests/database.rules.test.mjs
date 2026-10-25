@@ -218,9 +218,31 @@ test("a player can update profile but cannot put private location or protected s
   await assertFails(update(ref(db, `${roomPath}/publicPlayers/hider-uid`), { catchCode: "9999" }));
   await assertFails(update(ref(db, `${roomPath}/publicPlayers/hider-uid`), { role: "SEEKER" }));
   await assertFails(update(ref(db, `${roomPath}/publicPlayers/hider-uid`), { disputesRemaining: 99 }));
-  await assertFails(update(ref(db, `${roomPath}/publicPlayers/hider-uid`), { isInSafeZone: true }));
+  // Safe-zone flags are self-reported by the player's own device, so the owner may update them.
+  // Catch/jail state stays host-only (asserted above).
+  await assertSucceeds(update(ref(db, `${roomPath}/publicPlayers/hider-uid`), { isInSafeZone: true, safeZoneName: "Base" }));
   await assertFails(update(ref(db, `${roomPath}/publicPlayers/hider-uid`), { isStealthActive: true }));
   await assertSucceeds(update(ref(db, `${roomPath}/publicPlayers/hider-uid`), { stealthActivationRequestedAtEpochMs: Date.now() }));
+});
+
+test("only the host may write a catch acknowledgement, and only its seeker may read it", async () => {
+  await seedRoom();
+  const hostDb = testEnv.authenticatedContext("host-uid").database();
+  const seekerDb = testEnv.authenticatedContext("seeker-uid").database();
+  const otherSeekerDb = testEnv.authenticatedContext("visitor-uid").database();
+  const ack = {
+    seekerId: "seeker-uid",
+    targetHiderId: "hider-uid",
+    targetName: "hider-uid",
+    accepted: true,
+    timestamp: Date.now()
+  };
+  await assertFails(set(ref(seekerDb, `${roomPath}/catchAcks/seeker-uid`), ack));
+  await assertSucceeds(set(ref(hostDb, `${roomPath}/catchAcks/seeker-uid`), ack));
+  const readBack = await assertSucceeds(get(ref(seekerDb, `${roomPath}/catchAcks/seeker-uid`)));
+  assert.equal(readBack.child("accepted").val(), true);
+  await assertFails(get(ref(otherSeekerDb, `${roomPath}/catchAcks/seeker-uid`)));
+  await assertFails(set(ref(hostDb, `${roomPath}/catchAcks/seeker-uid`), { ...ack, accepted: "yes" }));
 });
 
 test("a Hider can request a jailbreak only through their own player record", async () => {

@@ -21,7 +21,7 @@ object Constants {
     const val LOCATION_UPDATE_INTERVAL_MS = 5000L
     const val FASTEST_LOCATION_INTERVAL_MS = 3000L
     const val CLOUD_SYNC_POLL_INTERVAL_MS = 2500L
-    const val CATCH_PROXIMITY_METERS = 10.0
+    const val CATCH_PROXIMITY_METERS = 25.0
 }`
   },
   {

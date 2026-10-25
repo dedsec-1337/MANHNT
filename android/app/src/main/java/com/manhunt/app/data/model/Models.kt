@@ -88,7 +88,8 @@ data class RoomNetworkModel(
     val session: GameSession = GameSession(),
     @SerializedName("publicPlayers") val players: Map<String, Player> = emptyMap(),
     val lastCatchAttempt: CatchAttemptPayload? = null,
-    val pendingCatchConfirm: CatchConfirmPayload? = null
+    val pendingCatchConfirm: CatchConfirmPayload? = null,
+    val catchAck: CatchAckPayload? = null
 )
 
 data class CatchAttemptPayload(
@@ -106,6 +107,19 @@ data class CatchConfirmPayload(
     val createdAtEpochMs: Long = System.currentTimeMillis(),
     val expiresAtEpochMs: Long = 0L,
     val status: String = "PENDING"
+)
+
+/**
+ * Host-written acknowledgement of a processed catch attempt.
+ * `lastCatchAttempt` is host-readable only, so a non-host Seeker cannot observe the outcome there;
+ * the host mirrors the result here under the seeker's own UID for that seeker to read back.
+ */
+data class CatchAckPayload(
+    val seekerId: String = "",
+    val targetHiderId: String = "",
+    val targetName: String = "",
+    val accepted: Boolean = false,
+    val timestamp: Long = 0L
 )
 
 data class GameSignalPayload(

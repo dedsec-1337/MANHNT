@@ -61,12 +61,12 @@ test('evaluateGeofence correctly identifies INSIDE, BOUNDARY_ALERT, and OUT_OF_B
   assert.equal(evalOut.status, 'OUT_OF_BOUNDS');
 });
 
-test('canAttemptCatch activates strictly when within 10 meters', () => {
+test('canAttemptCatch activates strictly when within 25 meters', () => {
   const p1 = { latitude: 40.00000, longitude: -74.00000 };
   // ~5m away
   const pClose = { latitude: 40.000045, longitude: -74.00000 };
-  // ~25m away
-  const pFar = { latitude: 40.000225, longitude: -74.00000 };
+  // ~35m away, clearly outside the 25m catch range
+  const pFar = { latitude: 40.000315, longitude: -74.00000 };
 
   assert.equal(canAttemptCatch(p1, pClose), true);
   assert.equal(canAttemptCatch(p1, pFar), false);

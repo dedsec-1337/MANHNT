@@ -557,7 +557,7 @@ export default function App() {
                     className="w-full accent-[#007AFF]"
                   />
                   <div className="flex justify-between text-[10px] text-[#8E8E93]">
-                    <span>3m (Catch Trigger &lt;10m)</span>
+                    <span>3m (Catch Trigger &lt;25m)</span>
                     <span>50m (Close)</span>
                     <span>150m (Safe)</span>
                   </div>
@@ -1309,7 +1309,7 @@ export default function App() {
                             >
                               <span>⚡</span>
                               <span>
-                                {canCatch ? 'Tag Alex (Within 10m!)' : `Catch Button (Too Far: ${distanceToSeeker}m)`}
+                                {canCatch ? 'Tag Alex (Within 25m!)' : `Catch Button (Too Far: ${distanceToSeeker}m)`}
                               </span>
                             </button>
                           </div>
@@ -1766,7 +1766,7 @@ export default function App() {
                   },
                   {
                     title: 'Physical Tag & 4-Digit Catch Code Verification',
-                    desc: 'Hider displays 4-digit PIN; Seeker must be within 10 meters and enter correct code to register catch.'
+                    desc: 'Hider displays 4-digit PIN; Seeker must be within 25 meters and enter correct code to register catch.'
                   },
                   {
                     title: 'Complete Gradle Project packaged in ZIP with GitHub README',

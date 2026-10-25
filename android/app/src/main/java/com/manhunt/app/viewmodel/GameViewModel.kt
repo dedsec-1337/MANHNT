@@ -76,6 +76,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         const val PREFERENCE_APPEARANCE_MODE = "appearance_mode"
         const val PREFERENCE_ACCENT_MODE = "accent_mode"
         const val PREFERENCE_HIGH_REFRESH_RATE = "high_refresh_rate_enabled"
+        const val PREFERENCE_ACTIVE_JOIN_CODE = "active_join_code"
+        const val PREFERENCE_ACTIVE_ROLE = "active_role"
     }
 
     private val db = (application as ManhuntApp).database
@@ -96,7 +98,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var jailbreakJob: Job? = null
     private var lastHandledCatchAttemptTimestamp: Long = 0L
     private var catchAttemptInFlightTimestamp: Long = 0L
-    private var lastCatchSuccessNotifiedTimestamp: Long = 0L
+    private var lastCatchAckTimestamp: Long = 0L
     private val handledStealthRequests = mutableMapOf<String, Long>()
     private val handledStealthExpiries = mutableMapOf<String, Long>()
 
@@ -163,6 +165,39 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         refreshBatteryOptimizationStatus()
+        restoreActiveRoomIfPossible()
+    }
+
+    /**
+     * Restores the last room after process death so a running match is not silently dropped.
+     * The Firebase UID, not the join code, identifies the player, so this is safe to re-run.
+     */
+    private fun restoreActiveRoomIfPossible() {
+        if (_uiState.value.session != null) return
+        val savedCode = settingsPreferences.getString(PREFERENCE_ACTIVE_JOIN_CODE, null)
+            ?.takeIf { it.isNotBlank() } ?: return
+        viewModelScope.launch {
+            val session = firebaseSync.fetchRoomSession(savedCode)
+            if (session == null) {
+                clearPersistedActiveRoom()
+                return@launch
+            }
+            joinRoom(savedCode)
+        }
+    }
+
+    private fun persistActiveRoom(session: GameSession, role: Role) {
+        settingsPreferences.edit()
+            .putString(PREFERENCE_ACTIVE_JOIN_CODE, session.joinCode)
+            .putString(PREFERENCE_ACTIVE_ROLE, role.name)
+            .apply()
+    }
+
+    private fun clearPersistedActiveRoom() {
+        settingsPreferences.edit()
+            .remove(PREFERENCE_ACTIVE_JOIN_CODE)
+            .remove(PREFERENCE_ACTIVE_ROLE)
+            .apply()
     }
 
     private suspend fun ensureFirebasePlayerIdentity(): Player = firebaseAuthMutex.withLock {
@@ -195,6 +230,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val radius = when (zoneSizePreset) { "2000m" -> 2000.0; "UNLIMITED" -> 50000.0; else -> 1000.0 }
                 val session = GameSession(roomId = UUID.randomUUID().toString(), roomName = roomName, joinCode = joinCode, hostPlayerId = host.id, status = GameStatus.LOBBY, zoneCenterLat = resolvedLat, zoneCenterLng = resolvedLng, zoneRadiusMeters = radius, durationMinutes = durationMinutes, remainingSeconds = durationMinutes * 60, zoneSizePreset = zoneSizePreset, isUnlimitedZone = zoneSizePreset.equals("UNLIMITED", true), headStartMinutes = headStartMinutes, headStartRemainingSeconds = headStartMinutes * 60, isShrinkingZoneEnabled = isShrinkingZoneEnabled, currentDynamicZoneRadiusMeters = radius, autoPingIntervalMinutes = autoPingIntervalMinutes, safeZones = safeZones, jailEnabled = true, jailLat = resolvedLat, jailLng = resolvedLng, jailRadiusMeters = Constants.JAIL_RADIUS_METERS)
                 if (firebaseSync.createRoom(RoomNetworkModel(session = session, players = mapOf(host.id to host)))) {
+                    persistActiveRoom(session, host.role)
                     _uiState.update { it.copy(session = session, myPlayer = host, players = listOf(host), isCreatingRoom = false, isOrganizer = true, toastMessage = "Room $joinCode") }
                     onComplete(true)
                 } else {
@@ -221,17 +257,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val authenticatedPlayer = ensureFirebasePlayerIdentity()
                 val session = firebaseSync.fetchRoomSession(upper)
                 if (session != null) {
-                    val existingRoom = firebaseSync.fetchRoomData(upper)
-                    val existingPlayer = existingRoom?.players?.get(authenticatedPlayer.id)
+                    // The room tree is unreadable before membership, so fetchRoomData() returns null
+                    // for a first-time joiner. Read the single public player record instead, which is
+                    // readable by UID, so a rejoin keeps the role and catch code already assigned.
+                    val existingPlayer = firebaseSync.fetchPublicPlayer(upper, authenticatedPlayer.id)
+                        ?: firebaseSync.fetchRoomData(upper)?.players?.get(authenticatedPlayer.id)
+                    // The public player record intentionally omits the private catch code, so a
+                    // returning Hider must read their own code back before re-persisting the role.
+                    val existingCatchCode = if (existingPlayer?.role == Role.HIDER) {
+                        firebaseSync.fetchCatchCode(upper, authenticatedPlayer.id) ?: ""
+                    } else ""
                     val me = existingPlayer?.copy(
                         name = authenticatedPlayer.name,
-                        avatarEmoji = authenticatedPlayer.avatarEmoji
+                        avatarEmoji = authenticatedPlayer.avatarEmoji,
+                        catchCode = existingCatchCode
                     ) ?: authenticatedPlayer.copy(role = Role.SEEKER, catchCode = "")
-                    val joined = if (existingPlayer != null) {
-                        firebaseSync.joinPlayer(upper, me)
-                    } else {
-                        firebaseSync.joinPlayer(upper, me)
+                    if (me.role == Role.HIDER && !me.catchCode.matches(Regex("^[0-9]{4}$"))) {
+                        _uiState.update { it.copy(isJoiningRoom = false, toastMessage = "Your Hider catch code is missing. Ask the organizer to reassign your role.") }
+                        onComplete(false)
+                        return@launch
                     }
+                    val joined = firebaseSync.joinPlayer(upper, me)
                     if (joined) {
                         val room = firebaseSync.fetchRoomData(upper)
                         if (room == null) {
@@ -250,6 +296,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         if (syncedMe.latitude != 0.0 || syncedMe.longitude != 0.0) {
                             firebaseSync.updateLocation(upper, me.id, syncedMe.latitude, syncedMe.longitude, syncedMe.isOutOfZone)
                         }
+                        persistActiveRoom(room.session, syncedMe.role)
                         _uiState.update { it.copy(session = room.session, players = room.players.values.toList(), myPlayer = syncedMe, isOrganizer = room.session.hostPlayerId == me.id, isJoiningRoom = false, currentDynamicRadiusMeters = room.session.currentDynamicZoneRadiusMeters, toastMessage = "Joined ${room.session.roomName}!" ) }
                         onComplete(true)
                     } else {
@@ -618,6 +665,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun leaveGame() {
         countdownTimerJob?.cancel()
+        clearPersistedActiveRoom()
         if (jailbreakJob?.isActive == true) {
             jailbreakJob?.cancel()
             _uiState.value.session?.joinCode?.let { code -> viewModelScope.launch { resetJailbreak(code) } }
@@ -657,7 +705,31 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun applyRoom(room: RoomNetworkModel) {
         val state = _uiState.value
-        val me = room.players[state.myPlayer.id] ?: state.myPlayer
+        val serverMe = room.players[state.myPlayer.id]
+        val localMe = state.myPlayer
+        // The polled server copy carries coordinates only when this device's location node exists.
+        // A missing node yields 0.0 and an older node yields a stale fix; either would wipe the
+        // local fresh GPS reading and disable the catch button and compass until the next write.
+        val me = when {
+            serverMe == null -> localMe
+            !GeoUtils.hasValidCoordinates(serverMe.latitude, serverMe.longitude) -> serverMe.copy(
+                latitude = localMe.latitude,
+                longitude = localMe.longitude,
+                isOutOfZone = localMe.isOutOfZone,
+                isInSafeZone = localMe.isInSafeZone,
+                safeZoneName = localMe.safeZoneName,
+                lastUpdatedEpochMs = localMe.lastUpdatedEpochMs
+            )
+            serverMe.lastUpdatedEpochMs < localMe.lastUpdatedEpochMs -> serverMe.copy(
+                latitude = localMe.latitude,
+                longitude = localMe.longitude,
+                isOutOfZone = localMe.isOutOfZone,
+                isInSafeZone = localMe.isInSafeZone,
+                safeZoneName = localMe.safeZoneName,
+                lastUpdatedEpochMs = localMe.lastUpdatedEpochMs
+            )
+            else -> serverMe
+        }
         val session = room.session
         val now = System.currentTimeMillis()
         val isStealthActive = me.isStealthActive && now < me.stealthUntilEpochMs
@@ -702,16 +774,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (state.isOrganizer && catchAttemptInFlightTimestamp != attempt.timestamp) {
                 catchAttemptInFlightTimestamp = attempt.timestamp
                 processCatchAttempt(attempt)
-            } else if (!state.isOrganizer) {
-                val caughtTarget = room.players[attempt.targetHiderId]
-                if (attempt.seekerId == me.id && caughtTarget?.isCaught == true &&
-                    attempt.timestamp > lastCatchSuccessNotifiedTimestamp
-                ) {
-                    lastCatchSuccessNotifiedTimestamp = attempt.timestamp
-                    _uiState.update { it.copy(toastMessage = "Catch confirmed!") }
-                    hapticManager.triggerCatchConfirmation()
-                }
             }
+        }
+        // `lastCatchAttempt` is host-readable only, so a non-host Seeker learns the outcome from the
+        // per-seeker ack node the host writes after validation.
+        val ack = room.catchAck
+        if (ack != null && ack.seekerId == me.id && ack.timestamp > lastCatchAckTimestamp) {
+            lastCatchAckTimestamp = ack.timestamp
+            _uiState.update {
+                it.copy(
+                    toastMessage = if (ack.accepted) {
+                        "Catch confirmed: ${ack.targetName.ifBlank { "Hider" }}"
+                    } else {
+                        "Catch rejected — check the code and distance"
+                    }
+                )
+            }
+            if (ack.accepted) hapticManager.triggerCatchConfirmation()
         }
         if (state.isOrganizer) {
             room.players.values.filter { it.stealthActivationRequestedAtEpochMs > 0L }
@@ -906,6 +985,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val state = _uiState.value
                 val session = state.session
                 val now = System.currentTimeMillis()
+                val targetName = state.players.firstOrNull { it.id == attempt.targetHiderId }?.name.orEmpty()
+                suspend fun ack(accepted: Boolean) {
+                    firebaseSync.publishCatchAck(
+                        session?.joinCode ?: return,
+                        CatchAckPayload(
+                            seekerId = attempt.seekerId,
+                            targetHiderId = attempt.targetHiderId,
+                            targetName = targetName,
+                            accepted = accepted,
+                            timestamp = attempt.timestamp
+                        )
+                    )
+                }
                 if (!state.isOrganizer || session == null || session.status != GameStatus.RUNNING || session.isPaused || session.headStartRemainingSeconds > 0 ||
                     attempt.timestamp > now + 5_000L || now - attempt.timestamp > 30_000L
                 ) {
@@ -925,6 +1017,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     !GeoUtils.isLocationRecent(target.lastUpdatedEpochMs, now)
                 ) {
                     lastHandledCatchAttemptTimestamp = attempt.timestamp
+                    ack(false)
                     return@launch
                 }
 
@@ -937,6 +1030,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     target.catchCode.trim() != attempt.enteredCode.trim()
                 ) {
                     lastHandledCatchAttemptTimestamp = attempt.timestamp
+                    ack(false)
                     return@launch
                 }
 
@@ -949,10 +1043,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 if (!firebaseSync.joinPlayer(session.joinCode, caught)) {
                     _uiState.update { it.copy(toastMessage = "Catch could not sync. Check the host connection.") }
+                    ack(false)
                     return@launch
                 }
 
                 lastHandledCatchAttemptTimestamp = attempt.timestamp
+                ack(true)
                 _uiState.update { current ->
                     current.copy(
                         players = current.players.map { player -> if (player.id == target.id) caught else player },

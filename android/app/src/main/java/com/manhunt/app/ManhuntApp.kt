@@ -21,6 +21,9 @@ class ManhuntApp : Application() {
         osmConfig.userAgentValue = packageName
         val basePath = File(cacheDir, "osmdroid")
         val tilePath = File(basePath, "tiles")
+        // Both directories must exist before any MapView is created; OSMDroid writes its tile cache
+        // under osmdroidBasePath on init and fails to render if the path is missing.
+        if (!basePath.exists()) basePath.mkdirs()
         if (!tilePath.exists()) tilePath.mkdirs()
         osmConfig.osmdroidBasePath = basePath
         osmConfig.osmdroidTileCache = tilePath
