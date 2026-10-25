@@ -386,8 +386,11 @@ fun LobbyScreen(
                 }
 
                 item {
+                    val hasSeeker = state.players.any { it.role == Role.SEEKER }
+                    val hasHider = state.players.any { it.role == Role.HIDER }
                     ApplePrimaryButton(
-                        text = "Start Manhunt",
+                        text = if (hasSeeker && hasHider) "Start Manhunt" else "Assign Seeker and Hider",
+                        enabled = hasSeeker && hasHider,
                         onClick = onStartGameClick
                     )
                 }

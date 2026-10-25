@@ -84,6 +84,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     )
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
     private var countdownTimerJob: Job? = null
+    private var startGameInFlight = false
     private val firebaseAuthMutex = Mutex()
     private var jailbreakJob: Job? = null
     private var lastHandledCatchAttemptTimestamp: Long = 0L
@@ -287,14 +288,64 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startGame() {
-        val s = _uiState.value.session ?: return
-        if (!_uiState.value.isOrganizer || s.status == GameStatus.FINISHED) return
-        val runningSession = s.copy(status = GameStatus.RUNNING, isPaused = false, remainingSeconds = s.durationMinutes * 60, headStartRemainingSeconds = s.headStartMinutes * 60, currentDynamicZoneRadiusMeters = s.zoneRadiusMeters, isAutoPingActive = false, autoPingRemainingSeconds = 0)
-        _uiState.update { it.copy(session = runningSession, headStartCountdownSeconds = runningSession.headStartRemainingSeconds, currentDynamicRadiusMeters = runningSession.zoneRadiusMeters, isShrinkingZoneActive = false, isAutoPingActive = false, autoPingCountdownSeconds = 0) }
-        viewModelScope.launch {
-            firebaseSync.updateSession(s.joinCode, mapOf("status" to GameStatus.RUNNING.name, "isPaused" to false, "remainingSeconds" to s.durationMinutes * 60, "headStartRemainingSeconds" to s.headStartMinutes * 60, "currentDynamicZoneRadiusMeters" to s.zoneRadiusMeters, "isAutoPingActive" to false, "autoPingRemainingSeconds" to 0))
+        val state = _uiState.value
+        val session = state.session ?: return
+        if (!state.isOrganizer || session.status != GameStatus.LOBBY || startGameInFlight) return
+
+        val hasSeeker = state.players.any { it.role == Role.SEEKER }
+        val hasHider = state.players.any { it.role == Role.HIDER }
+        if (!hasSeeker || !hasHider) {
+            _uiState.update { it.copy(toastMessage = "Assign at least one Seeker and one Hider before starting.") }
+            return
         }
-        startCountdown()
+
+        val runningSession = session.copy(
+            status = GameStatus.RUNNING,
+            isPaused = false,
+            remainingSeconds = session.durationMinutes * 60,
+            headStartRemainingSeconds = session.headStartMinutes * 60,
+            currentDynamicZoneRadiusMeters = session.zoneRadiusMeters,
+            isAutoPingActive = false,
+            autoPingRemainingSeconds = 0
+        )
+        startGameInFlight = true
+        viewModelScope.launch {
+            try {
+                val started = firebaseSync.updateSession(
+                    session.joinCode,
+                    mapOf(
+                        "status" to GameStatus.RUNNING.name,
+                        "isPaused" to false,
+                        "remainingSeconds" to session.durationMinutes * 60,
+                        "headStartRemainingSeconds" to session.headStartMinutes * 60,
+                        "currentDynamicZoneRadiusMeters" to session.zoneRadiusMeters,
+                        "isAutoPingActive" to false,
+                        "autoPingRemainingSeconds" to 0
+                    )
+                )
+                if (!started) {
+                    _uiState.update { it.copy(toastMessage = "Could not start the game. Check the connection and try again.") }
+                    return@launch
+                }
+                _uiState.update { current ->
+                    if (current.session?.joinCode != session.joinCode || !current.isOrganizer) {
+                        current
+                    } else {
+                        current.copy(
+                            session = runningSession,
+                            headStartCountdownSeconds = runningSession.headStartRemainingSeconds,
+                            currentDynamicRadiusMeters = runningSession.zoneRadiusMeters,
+                            isShrinkingZoneActive = false,
+                            isAutoPingActive = false,
+                            autoPingCountdownSeconds = 0
+                        )
+                    }
+                }
+                if (_uiState.value.session?.joinCode == session.joinCode) startCountdown()
+            } finally {
+                startGameInFlight = false
+            }
+        }
     }
 
     fun toggleSafetyPause() {
