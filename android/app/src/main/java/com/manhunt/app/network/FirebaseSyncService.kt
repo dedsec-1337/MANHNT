@@ -79,10 +79,9 @@ class FirebaseSyncService private constructor() {
 
     init {
         val logging = HttpLoggingInterceptor().apply {
-            // Firebase ID tokens are sent in the "auth" query parameter for REST requests.
-            // Never allow HTTP logs to expose that credential.
-            redactQueryParams("auth")
-            level = HttpLoggingInterceptor.Level.BASIC
+            // BASIC logging prints the full request URL, which contains the Firebase ID token.
+            // OkHttp's logger cannot redact query parameters, so disable wire logging here.
+            level = HttpLoggingInterceptor.Level.NONE
         }
 
         val client = OkHttpClient.Builder()
