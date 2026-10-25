@@ -1,6 +1,7 @@
 package com.manhunt.app.viewmodel
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.manhunt.app.ManhuntApp
@@ -69,11 +70,18 @@ data class GameUiState(
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
+    private companion object {
+        const val PREFERENCE_DARK_MODE = "is_dark_mode"
+    }
+
     private val db = (application as ManhuntApp).database
     private val firebaseSync = FirebaseSyncService.instance
     private val compass = CompassSensorManager(application)
     private val hapticManager = HapticFeedbackManager(application)
-    private val _uiState = MutableStateFlow(GameUiState())
+    private val settingsPreferences = application.getSharedPreferences("manhunt_settings", Context.MODE_PRIVATE)
+    private val _uiState = MutableStateFlow(
+        GameUiState(isDarkMode = settingsPreferences.getBoolean(PREFERENCE_DARK_MODE, false))
+    )
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
     private var countdownTimerJob: Job? = null
     private val firebaseAuthMutex = Mutex()
@@ -472,7 +480,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleDarkMode() { _uiState.update { it.copy(isDarkMode = !it.isDarkMode) } }
+    fun toggleDarkMode() {
+        val darkModeEnabled = !_uiState.value.isDarkMode
+        settingsPreferences.edit().putBoolean(PREFERENCE_DARK_MODE, darkModeEnabled).apply()
+        _uiState.update { it.copy(isDarkMode = darkModeEnabled) }
+    }
     fun refreshBatteryOptimizationStatus() {
         val app = getApplication<Application>()
         _uiState.update { it.copy(isBatteryOptimizationExempt = BatteryOptimizationHelper.isBatteryOptimizationDisabled(app)) }
