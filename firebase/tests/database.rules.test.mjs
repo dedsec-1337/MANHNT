@@ -77,6 +77,17 @@ async function seedRoom() {
         "host-uid": player("host-uid"),
         "seeker-uid": player("seeker-uid"),
         "hider-uid": player("hider-uid", "HIDER")
+      },
+      // Simulate records created by the old app; these must not be readable anymore.
+      players: {
+        "hider-uid": {
+          id: "hider-uid",
+          name: "hider-uid",
+          role: "HIDER",
+          catchCode: "1234",
+          latitude: 22.5726,
+          longitude: 88.3639
+        }
       }
     });
     await set(ref(db, `roomPrivate/${roomCode}/locations`), {
@@ -122,6 +133,8 @@ test("authenticated non-members cannot read the room tree but can look up the jo
   await assertFails(get(ref(visitorDb, roomPath)));
   const memberDb = testEnv.authenticatedContext("seeker-uid").database();
   await assertFails(get(ref(memberDb, roomPath)));
+  await assertFails(get(ref(memberDb, `${roomPath}/players`)));
+  await assertFails(get(ref(visitorDb, `${roomPath}/players`)));
   const sessionSnapshot = await assertSucceeds(get(ref(visitorDb, `${roomPath}/session`)));
   assert.equal(sessionSnapshot.val().roomName, "Rules Test");
   await assertSucceeds(get(ref(memberDb, `${roomPath}/publicPlayers`)));
