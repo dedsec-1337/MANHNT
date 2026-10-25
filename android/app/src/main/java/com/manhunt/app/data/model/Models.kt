@@ -18,13 +18,13 @@ data class Player(
     val avatarEmoji: String = "🏃",
     val role: Role = Role.SEEKER,
     val isCaught: Boolean = false,
-    val catchCode: String = "",
-    val latitude: Double = 0.0,
-    val longitude: Double = 0.0,
-    val isOutOfZone: Boolean = false,
+    @Transient val catchCode: String = "",
+    @Transient val latitude: Double = 0.0,
+    @Transient val longitude: Double = 0.0,
+    @Transient val isOutOfZone: Boolean = false,
     val isInSafeZone: Boolean = false,
     val safeZoneName: String? = null,
-    val lastUpdatedEpochMs: Long = System.currentTimeMillis(),
+    @Transient val lastUpdatedEpochMs: Long = System.currentTimeMillis(),
     val isInJail: Boolean = false,
     val immunityUntilEpochMs: Long = 0L,
     val isStealthActive: Boolean = false,
@@ -66,6 +66,13 @@ data class GameSession(
     val jailRadiusMeters: Double = 25.0,
     val isJailbreakInProgress: Boolean = false,
     val jailbreakProgressSeconds: Int = 0
+)
+
+data class LocationPayload(
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val isOutOfZone: Boolean = false,
+    val lastUpdatedEpochMs: Long = System.currentTimeMillis()
 )
 
 data class RoomNetworkModel(
