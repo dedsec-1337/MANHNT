@@ -174,8 +174,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val authenticatedPlayer = ensureFirebasePlayerIdentity()
                 val session = firebaseSync.fetchRoomSession(upper)
                 if (session != null) {
-                    val me = authenticatedPlayer.copy(role = Role.SEEKER, catchCode = "")
-                    if (firebaseSync.joinPlayer(upper, me)) {
+                    val existingRoom = firebaseSync.fetchRoomData(upper)
+                    val existingPlayer = existingRoom?.players?.get(authenticatedPlayer.id)
+                    val me = existingPlayer?.copy(
+                        name = authenticatedPlayer.name,
+                        avatarEmoji = authenticatedPlayer.avatarEmoji
+                    ) ?: authenticatedPlayer.copy(role = Role.SEEKER, catchCode = "")
+                    val joined = if (existingPlayer != null) {
+                        firebaseSync.joinPlayer(upper, me)
+                    } else {
+                        firebaseSync.joinPlayer(upper, me)
+                    }
+                    if (joined) {
                         val room = firebaseSync.fetchRoomData(upper)
                         if (room == null) {
                             _uiState.update { it.copy(isJoiningRoom = false, toastMessage = "Joined, but room data could not be loaded. Check Firebase rules.") }
