@@ -37,6 +37,7 @@ data class GameUiState(
     val players: List<Player> = emptyList(),
     val isOrganizer: Boolean = false,
     val headingDegrees: Float = 0f,
+    val hasCompassHeading: Boolean = false,
     val nearestSeekerDistance: Double = -1.0,
     val nearestSeekerBearing: Float = 0f,
     val nearbyCatchableHider: Player? = null,
@@ -104,8 +105,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { it.copy(toastMessage = "Firebase sign-in failed. Check your connection and Anonymous Authentication settings.") }
             }
         }
-        compass.startListening()
-        viewModelScope.launch { compass.azimuthFlow.collect { h -> _uiState.update { it.copy(headingDegrees = h) } } }
+        viewModelScope.launch {
+            compass.azimuthFlow.collect { heading ->
+                _uiState.update { it.copy(headingDegrees = heading) }
+            }
+        }
+        viewModelScope.launch {
+            compass.hasHeadingFlow.collect { available ->
+                _uiState.update { it.copy(hasCompassHeading = available) }
+            }
+        }
+        viewModelScope.launch {
+            _uiState.map { it.session?.status }
+                .distinctUntilChanged()
+                .collect { status ->
+                    if (status == GameStatus.RUNNING || status == GameStatus.PAUSED) {
+                        compass.startListening()
+                    } else {
+                        compass.stopListening()
+                    }
+                }
+        }
         viewModelScope.launch { ManhuntLocationService.locationUpdates.collect { loc -> handleLocation(loc.latitude, loc.longitude) } }
         viewModelScope.launch { firebaseSync.roomState.collect { if (it != null) applyRoom(it) } }
         viewModelScope.launch { firebaseSync.syncStatus.collect { s -> _uiState.update { it.copy(networkStatus = s) } } }
@@ -499,12 +519,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (me.id == state.myPlayer.id && !state.isStealthActive && isStealthActive) {
             hapticManager.triggerPowerUp()
         }
-        val canJailbreak = session.jailEnabled && me.role == Role.HIDER && !me.isCaught && !me.isInJail &&
+        val canJailbreak = session.jailEnabled &&
+            GeoUtils.hasValidCoordinates(me.latitude, me.longitude) &&
+            GeoUtils.hasValidCoordinates(session.jailLat, session.jailLng) &&
+            me.role == Role.HIDER && !me.isCaught && !me.isInJail &&
             session.status == GameStatus.RUNNING &&
             GeoUtils.distanceMeters(me.latitude, me.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters &&
             room.players.values.any { it.role == Role.HIDER && it.isInJail }
         val huntersNearJail = room.players.values.filter { player ->
-            player.role == Role.SEEKER && player.latitude != 0.0 &&
+            player.role == Role.SEEKER && GeoUtils.hasValidCoordinates(player.latitude, player.longitude) &&
                 GeoUtils.distanceMeters(player.latitude, player.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters * 2
         }
         _uiState.update {
@@ -560,17 +583,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleLocation(lat: Double, lng: Double) {
+        if (!GeoUtils.hasValidCoordinates(lat, lng)) return
+        compass.updateLocation(lat, lng)
+
         val session = _uiState.value.session
         val radius = session?.currentDynamicZoneRadiusMeters?.takeIf { it > 0.0 }
             ?: session?.zoneRadiusMeters ?: 1000.0
         val unlimited = session?.isUnlimitedZone ?: false
-        val geofence = if (session != null && radius > 0.0 && session.zoneCenterLat != 0.0 && !unlimited) {
+        val geofence = if (session != null && radius > 0.0 && GeoUtils.hasValidCoordinates(session.zoneCenterLat, session.zoneCenterLng) && !unlimited) {
             GeofenceManager.evaluate(lat, lng, session.zoneCenterLat, session.zoneCenterLng, radius)
         } else {
             com.manhunt.app.util.GeofenceEvaluation(GeofenceStatus.INSIDE, 0.0, 0.0, false)
         }
         val safeZone = session?.safeZones?.firstOrNull { zone ->
-            GeoUtils.distanceMeters(lat, lng, zone.latitude, zone.longitude) <= zone.radiusMeters
+            GeoUtils.hasValidCoordinates(zone.latitude, zone.longitude) &&
+                GeoUtils.distanceMeters(lat, lng, zone.latitude, zone.longitude) <= zone.radiusMeters
         }
         val now = System.currentTimeMillis()
         val previousMe = _uiState.value.myPlayer
@@ -608,10 +635,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             state.session?.status == GameStatus.RUNNING &&
             state.session?.isPaused == false
         if (!activeHiderHeartbeat) hapticManager.stop()
+
+        if (!GeoUtils.hasValidCoordinates(me.latitude, me.longitude)) {
+            hapticManager.stop()
+            _uiState.update {
+                it.copy(
+                    nearestSeekerDistance = -1.0,
+                    nearestSeekerBearing = 0f,
+                    nearbyCatchableHider = null,
+                    safeZoneNotice = null
+                )
+            }
+            return
+        }
+
         if (me.role == Role.HIDER) {
             var nearest = Double.MAX_VALUE
             var bearing = 0f
-            others.filter { it.role == Role.SEEKER && it.latitude != 0.0 && it.longitude != 0.0 }.forEach { seeker ->
+            others.filter {
+                it.role == Role.SEEKER &&
+                    GeoUtils.hasValidCoordinates(it.latitude, it.longitude)
+            }.forEach { seeker ->
                 val distance = GeoUtils.distanceMeters(me.latitude, me.longitude, seeker.latitude, seeker.longitude)
                 if (distance < nearest) {
                     nearest = distance
@@ -622,25 +666,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (distance >= 0.0 && activeHiderHeartbeat) {
                 hapticManager.evaluateProximityHaptics(distance)
             }
-            _uiState.update { it.copy(nearestSeekerDistance = distance, nearestSeekerBearing = bearing, nearbyCatchableHider = null) }
+            _uiState.update {
+                it.copy(
+                    nearestSeekerDistance = distance,
+                    nearestSeekerBearing = bearing,
+                    nearbyCatchableHider = null
+                )
+            }
         } else {
             val session = state.session
-            val hiders = others.filter { it.role == Role.HIDER && !it.isCaught }
+            val hiders = others.filter {
+                it.role == Role.HIDER && !it.isCaught &&
+                    GeoUtils.hasValidCoordinates(it.latitude, it.longitude)
+            }
             fun isActuallyInSafeZone(player: Player): Boolean = session?.safeZones?.any { zone ->
-                GeoUtils.distanceMeters(player.latitude, player.longitude, zone.latitude, zone.longitude) <= zone.radiusMeters
+                GeoUtils.hasValidCoordinates(zone.latitude, zone.longitude) &&
+                    GeoUtils.distanceMeters(player.latitude, player.longitude, zone.latitude, zone.longitude) <= zone.radiusMeters
             } == true
             val catchable = hiders.firstOrNull { hider ->
                 !isActuallyInSafeZone(hider) && hider.immunityUntilEpochMs <= System.currentTimeMillis() &&
-                    hider.latitude != 0.0 && hider.longitude != 0.0 &&
                     GeoUtils.distanceMeters(me.latitude, me.longitude, hider.latitude, hider.longitude) <= Constants.CATCH_PROXIMITY_METERS
             }
             val protected = hiders.firstOrNull { isActuallyInSafeZone(it) }
             _uiState.update {
-                it.copy(nearbyCatchableHider = catchable, safeZoneNotice = protected?.let { h -> "${h.name} is protected in ${h.safeZoneName?.takeIf { it.isNotBlank() } ?: "Safe Zone"}!" })
+                it.copy(
+                    nearbyCatchableHider = catchable,
+                    safeZoneNotice = protected?.let {
+                        h -> "${h.name} is protected in ${h.safeZoneName?.takeIf { name -> name.isNotBlank() } ?: "Safe Zone"}!"
+                    }
+                )
             }
         }
     }
-
     private fun processStealthRequest(requester: Player) {
         if (!_uiState.value.isOrganizer) return
         val session = _uiState.value.session ?: return
