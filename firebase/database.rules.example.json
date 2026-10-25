@@ -9,85 +9,216 @@
         "session": {
           ".write": "auth != null && data.exists() && data.child('hostPlayerId').val() === auth.uid && newData.child('hostPlayerId').val() === auth.uid",
           ".validate": "newData.hasChildren(['roomId', 'roomName', 'joinCode', 'hostPlayerId', 'status']) && newData.child('joinCode').val() === $joinCode && newData.child('hostPlayerId').isString() && (newData.child('status').val() === 'LOBBY' || newData.child('status').val() === 'RUNNING' || newData.child('status').val() === 'PAUSED' || newData.child('status').val() === 'FINISHED')",
-          "roomId": { ".validate": "newData.isString()" },
-          "roomName": { ".validate": "newData.isString() && newData.val().length <= 80" },
-          "joinCode": { ".validate": "newData.isString() && newData.val() === $joinCode" },
-          "hostPlayerId": { ".validate": "newData.isString() && newData.val() === data.val() || (!data.exists() && newData.val() === auth.uid)" },
-          "status": { ".validate": "newData.isString() && (newData.val() === 'LOBBY' || newData.val() === 'RUNNING' || newData.val() === 'PAUSED' || newData.val() === 'FINISHED')" },
-          "zoneCenterLat": { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
-          "zoneCenterLng": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
-          "zoneRadiusMeters": { ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 100000" },
-          "durationMinutes": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 1440" },
-          "remainingSeconds": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400" },
-          "isPaused": { ".validate": "newData.isBoolean()" },
-          "winnerRole": { ".validate": "newData.val() === null || newData.val() === 'SEEKER' || newData.val() === 'HIDER'" },
-          "totalCatches": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-          "zoneSizePreset": { ".validate": "newData.isString()" },
-          "isUnlimitedZone": { ".validate": "newData.isBoolean()" },
-          "headStartMinutes": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 120" },
-          "headStartRemainingSeconds": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 7200" },
-          "isShrinkingZoneEnabled": { ".validate": "newData.isBoolean()" },
-          "currentDynamicZoneRadiusMeters": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000" },
-          "autoPingIntervalMinutes": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1440" },
-          "isAutoPingActive": { ".validate": "newData.isBoolean()" },
-          "autoPingRemainingSeconds": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400" },
-          "safeZones": { ".validate": "newData.exists()" },
-          "jailEnabled": { ".validate": "newData.isBoolean()" },
-          "jailLat": { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
-          "jailLng": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
-          "jailRadiusMeters": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" },
-          "isJailbreakInProgress": { ".validate": "newData.isBoolean()" },
-          "jailbreakProgressSeconds": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5" },
-          "$other": { ".validate": false }
+          "roomId": {
+            ".validate": "newData.isString()"
+          },
+          "roomName": {
+            ".validate": "newData.isString() && newData.val().length <= 80"
+          },
+          "joinCode": {
+            ".validate": "newData.isString() && newData.val() === $joinCode"
+          },
+          "hostPlayerId": {
+            ".validate": "newData.isString() && newData.val() === data.val() || (!data.exists() && newData.val() === auth.uid)"
+          },
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'LOBBY' || newData.val() === 'RUNNING' || newData.val() === 'PAUSED' || newData.val() === 'FINISHED')"
+          },
+          "zoneCenterLat": {
+            ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+          },
+          "zoneCenterLng": {
+            ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+          },
+          "zoneRadiusMeters": {
+            ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 100000"
+          },
+          "durationMinutes": {
+            ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 1440"
+          },
+          "remainingSeconds": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400"
+          },
+          "isPaused": {
+            ".validate": "newData.isBoolean()"
+          },
+          "winnerRole": {
+            ".validate": "newData.val() === null || newData.val() === 'SEEKER' || newData.val() === 'HIDER'"
+          },
+          "totalCatches": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "zoneSizePreset": {
+            ".validate": "newData.isString()"
+          },
+          "isUnlimitedZone": {
+            ".validate": "newData.isBoolean()"
+          },
+          "headStartMinutes": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 120"
+          },
+          "headStartRemainingSeconds": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 7200"
+          },
+          "isShrinkingZoneEnabled": {
+            ".validate": "newData.isBoolean()"
+          },
+          "currentDynamicZoneRadiusMeters": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+          },
+          "autoPingIntervalMinutes": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1440"
+          },
+          "isAutoPingActive": {
+            ".validate": "newData.isBoolean()"
+          },
+          "autoPingRemainingSeconds": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400"
+          },
+          "safeZones": {
+            ".validate": "newData.exists()"
+          },
+          "jailEnabled": {
+            ".validate": "newData.isBoolean()"
+          },
+          "jailLat": {
+            ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+          },
+          "jailLng": {
+            ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+          },
+          "jailRadiusMeters": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000"
+          },
+          "isJailbreakInProgress": {
+            ".validate": "newData.isBoolean()"
+          },
+          "jailbreakProgressSeconds": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 5"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
         "players": {
           "$playerId": {
-            ".write": "auth != null && (root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid || ($playerId === auth.uid && ((!data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === 'SEEKER') || (data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === data.child('role').val() && newData.child('catchCode').val() === data.child('catchCode').val() && newData.child('isCaught').val() === data.child('isCaught').val() && newData.child('isInJail').val() === data.child('isInJail').val() && newData.child('immunityUntilEpochMs').val() === data.child('immunityUntilEpochMs').val() && newData.child('disputesRemaining').val() === data.child('disputesRemaining').val())))",
+            ".write": "auth != null && ((root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid) || ($playerId === auth.uid && !newData.exists()) || ($playerId === auth.uid && ((!data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === 'SEEKER') || (data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === data.child('role').val() && newData.child('catchCode').val() === data.child('catchCode').val() && newData.child('isCaught').val() === data.child('isCaught').val() && newData.child('isInJail').val() === data.child('isInJail').val() && newData.child('immunityUntilEpochMs').val() === data.child('immunityUntilEpochMs').val() && newData.child('disputesRemaining').val() === data.child('disputesRemaining').val() && newData.child('isInSafeZone').val() === data.child('isInSafeZone').val() && newData.child('safeZoneName').val() === data.child('safeZoneName').val() && newData.child('isStealthActive').val() === data.child('isStealthActive').val() && newData.child('stealthUntilEpochMs').val() === data.child('stealthUntilEpochMs').val() && newData.child('stealthCooldownUntilEpochMs').val() === data.child('stealthCooldownUntilEpochMs').val())))",
             ".validate": "newData.hasChildren(['id', 'name', 'role']) && newData.child('id').val() === $playerId && (newData.child('role').val() === 'SEEKER' || newData.child('role').val() === 'HIDER')",
-            "id": { ".validate": "newData.isString() && newData.val() === $playerId" },
-            "name": { ".validate": "newData.isString() && newData.val().length <= 40" },
-            "avatarEmoji": { ".validate": "newData.isString() && newData.val().length <= 16" },
-            "role": { ".validate": "newData.isString() && (newData.val() === 'SEEKER' || newData.val() === 'HIDER')" },
-            "isCaught": { ".validate": "newData.isBoolean()" },
-            "catchCode": { ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[0-9]{4}$/))" },
-            "latitude": { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
-            "longitude": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
-            "isOutOfZone": { ".validate": "newData.isBoolean()" },
-            "isInSafeZone": { ".validate": "newData.isBoolean()" },
-            "safeZoneName": { ".validate": "newData.isString() && newData.val().length <= 80" },
-            "lastUpdatedEpochMs": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-            "isInJail": { ".validate": "newData.isBoolean()" },
-            "immunityUntilEpochMs": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-            "isStealthActive": { ".validate": "newData.isBoolean()" },
-            "stealthUntilEpochMs": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-            "stealthCooldownUntilEpochMs": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-            "disputesRemaining": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2" },
-            "jailbreakHoldStartedAtEpochMs": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-            "$other": { ".validate": false }
+            "id": {
+              ".validate": "newData.isString() && newData.val() === $playerId"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "avatarEmoji": {
+              ".validate": "newData.isString() && newData.val().length <= 16"
+            },
+            "role": {
+              ".validate": "newData.isString() && (newData.val() === 'SEEKER' || newData.val() === 'HIDER')"
+            },
+            "isCaught": {
+              ".validate": "newData.isBoolean()"
+            },
+            "catchCode": {
+              ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[0-9]{4}$/))"
+            },
+            "latitude": {
+              ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+            },
+            "longitude": {
+              ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+            },
+            "isOutOfZone": {
+              ".validate": "newData.isBoolean()"
+            },
+            "isInSafeZone": {
+              ".validate": "newData.isBoolean()"
+            },
+            "safeZoneName": {
+              ".validate": "newData.isString() && newData.val().length <= 80"
+            },
+            "lastUpdatedEpochMs": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "isInJail": {
+              ".validate": "newData.isBoolean()"
+            },
+            "immunityUntilEpochMs": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "isStealthActive": {
+              ".validate": "newData.isBoolean()"
+            },
+            "stealthUntilEpochMs": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "stealthCooldownUntilEpochMs": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "disputesRemaining": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2"
+            },
+            "jailbreakHoldStartedAtEpochMs": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            },
+            "$other": {
+              ".validate": false
+            },
+            "stealthActivationRequestedAtEpochMs": {
+              ".validate": "newData.isNumber() && newData.val() >= 0"
+            }
           }
         },
         "lastCatchAttempt": {
-          ".write": "auth != null && newData.exists() && newData.child('seekerId').val() === auth.uid && root.child('rooms').child($joinCode).child('session').child('status').val() === 'RUNNING' && root.child('rooms').child($joinCode).child('session').child('isPaused').val() !== true && root.child('rooms').child($joinCode).child('players').child(auth.uid).child('role').val() === 'SEEKER' && root.child('rooms').child($joinCode).child('players').child(newData.child('targetHiderId').val()).child('role').val() === 'HIDER' && newData.child('targetHiderId').val() !== auth.uid",
+          ".write": "auth != null && newData.exists() && newData.child('seekerId').val() === auth.uid && root.child('rooms').child($joinCode).child('session').child('status').val() === 'RUNNING' && root.child('rooms').child($joinCode).child('session').child('isPaused').val() !== true && root.child('rooms').child($joinCode).child('players').child(auth.uid).child('role').val() === 'SEEKER' && root.child('rooms').child($joinCode).child('players').child(newData.child('targetHiderId').val()).child('role').val() === 'HIDER' && newData.child('targetHiderId').val() !== auth.uid && root.child('rooms').child($joinCode).child('players').child(newData.child('targetHiderId').val()).child('catchCode').val() === newData.child('enteredCode').val()",
           ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'enteredCode', 'timestamp']) && newData.child('seekerId').isString() && newData.child('targetHiderId').isString() && newData.child('enteredCode').isString() && newData.child('timestamp').isNumber() && newData.child('timestamp').val() >= 0 && newData.child('enteredCode').val().matches(/^[0-9]{4}$/)",
-          "seekerId": { ".validate": "newData.isString() && newData.val() === auth.uid" },
-          "targetHiderId": { ".validate": "newData.isString() && newData.val() !== auth.uid" },
-          "enteredCode": { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}$/)" },
-          "timestamp": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-          "$other": { ".validate": false }
+          "seekerId": {
+            ".validate": "newData.isString() && newData.val() === auth.uid"
+          },
+          "targetHiderId": {
+            ".validate": "newData.isString() && newData.val() !== auth.uid"
+          },
+          "enteredCode": {
+            ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}$/)"
+          },
+          "timestamp": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
         "pendingCatchConfirm": {
-          ".write": "auth != null && (root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid || (data.exists() && data.child('status').val() === 'PENDING' && data.child('targetHiderId').val() === auth.uid && newData.child('seekerId').val() === data.child('seekerId').val() && newData.child('targetHiderId').val() === data.child('targetHiderId').val() && newData.child('createdAtEpochMs').val() === data.child('createdAtEpochMs').val() && (newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')))",
+          ".write": "auth != null && ((root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid) || (data.exists() && data.child('status').val() === 'PENDING' && data.child('targetHiderId').val() === auth.uid && newData.child('seekerId').val() === data.child('seekerId').val() && newData.child('targetHiderId').val() === data.child('targetHiderId').val() && newData.child('seekerName').val() === data.child('seekerName').val() && newData.child('distanceMeters').val() === data.child('distanceMeters').val() && newData.child('createdAtEpochMs').val() === data.child('createdAtEpochMs').val() && newData.child('expiresAtEpochMs').val() === data.child('expiresAtEpochMs').val() && (newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')))",
           ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'seekerName', 'distanceMeters', 'createdAtEpochMs', 'expiresAtEpochMs', 'status']) && newData.child('seekerId').isString() && newData.child('targetHiderId').isString() && newData.child('seekerId').val() !== newData.child('targetHiderId').val() && newData.child('seekerName').isString() && newData.child('distanceMeters').isNumber() && newData.child('distanceMeters').val() >= 0 && newData.child('createdAtEpochMs').isNumber() && newData.child('expiresAtEpochMs').isNumber() && (newData.child('status').val() === 'PENDING' || newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')",
-          "seekerId": { ".validate": "newData.isString()" },
-          "targetHiderId": { ".validate": "newData.isString()" },
-          "seekerName": { ".validate": "newData.isString()" },
-          "distanceMeters": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-          "createdAtEpochMs": { ".validate": "newData.isNumber() && newData.val() >= 0" },
-          "expiresAtEpochMs": { ".validate": "newData.isNumber() && newData.val() >= newData.parent().child('createdAtEpochMs').val()" },
-          "status": { ".validate": "newData.isString() && (newData.val() === 'PENDING' || newData.val() === 'ACCEPTED' || newData.val() === 'REJECTED')" },
-          "$other": { ".validate": false }
+          "seekerId": {
+            ".validate": "newData.isString()"
+          },
+          "targetHiderId": {
+            ".validate": "newData.isString()"
+          },
+          "seekerName": {
+            ".validate": "newData.isString()"
+          },
+          "distanceMeters": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "createdAtEpochMs": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "expiresAtEpochMs": {
+            ".validate": "newData.isNumber() && newData.val() >= newData.parent().child('createdAtEpochMs').val()"
+          },
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'PENDING' || newData.val() === 'ACCEPTED' || newData.val() === 'REJECTED')"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
-        "$other": { ".validate": false }
+        "$other": {
+          ".validate": false
+        }
       }
     }
   }
