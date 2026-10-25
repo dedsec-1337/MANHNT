@@ -1,0 +1,30 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$joinCode": {
+        ".read": "auth != null",
+        ".write": "auth != null && !data.exists() && newData.child('session').child('hostPlayerId').val() === auth.uid",
+        "session": {
+          ".write": "auth != null && data.child('hostPlayerId').val() === auth.uid && newData.child('hostPlayerId').val() === auth.uid",
+          ".validate": "newData.hasChildren(['joinCode', 'roomName', 'status', 'hostPlayerId']) && newData.child('joinCode').val() === $joinCode && newData.child('hostPlayerId').isString()"
+        },
+        "players": {
+          "$playerId": {
+            ".write": "auth != null && ($playerId === auth.uid || root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['id', 'name', 'role']) && newData.child('id').val() === $playerId && (newData.child('role').val() === 'SEEKER' || newData.child('role').val() === 'HIDER')"
+          }
+        },
+        "lastCatchAttempt": {
+          ".write": "auth != null && newData.child('seekerId').val() === auth.uid",
+          ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'enteredCode', 'timestamp']) && newData.child('targetHiderId').val() !== auth.uid"
+        },
+        "pendingCatchConfirm": {
+          ".write": "auth != null && (data.child('seekerId').val() === auth.uid || data.child('targetHiderId').val() === auth.uid || newData.child('seekerId').val() === auth.uid || newData.child('targetHiderId').val() === auth.uid)",
+          ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'status']) && (newData.child('seekerId').val() === auth.uid || newData.child('targetHiderId').val() === auth.uid)"
+        }
+      }
+    }
+  }
+}
