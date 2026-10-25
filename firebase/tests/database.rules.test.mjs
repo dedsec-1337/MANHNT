@@ -138,6 +138,9 @@ test("a player can update location and profile but cannot change protected gamep
   await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { catchCode: "9999" }));
   await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { role: "SEEKER" }));
   await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { disputesRemaining: 99 }));
+  await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { isInSafeZone: true }));
+  await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { isStealthActive: true }));
+  await assertSucceeds(update(ref(db, `${roomPath}/players/hider-uid`), { stealthActivationRequestedAtEpochMs: Date.now() }));
 });
 
 test("a Hider can request a jailbreak only through their own player record", async () => {
