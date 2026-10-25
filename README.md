@@ -83,19 +83,11 @@ Output: `android/app/build/outputs/apk/release/app-release.apk`
 
 ### Firebase rules
 
-```json
-{
-  "rules": {
-    "rooms": {
-      ".read": true,
-      ".write": true
-    }
-  }
-}
-```
+**Do not use open database rules** such as `".read": true` and `".write": true`. They let anyone read or overwrite live rooms.
 
-URL is already set in `Constants.kt`.
+Use `firebase/database.rules.example.json` as the version-controlled rules source. Review and publish that file through Firebase Console or the Firebase CLI after testing it against the live app's write paths. These rules restrict room access to authenticated users and reserve authoritative gameplay changes for the room host; player GPS coordinates are still client-reported and cannot be proven authentic by database rules alone.
 
+The Firebase Realtime Database URL is configured in `android/app/src/main/java/com/manhunt/app/data/Constants.kt`.
 ---
 
 ## Architecture (short)
