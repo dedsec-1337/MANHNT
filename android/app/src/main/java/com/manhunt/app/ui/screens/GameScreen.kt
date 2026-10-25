@@ -32,7 +32,6 @@ fun GameScreen(
     state: GameUiState,
     onToggleSafetyPause: () -> Unit,
     onAttemptCatch: (targetHiderId: String, code: String) -> Unit,
-    onRespondToCatchConfirm: (accept: Boolean) -> Unit,
     onActivateStealth: () -> Unit,
     onStartJailbreak: () -> Unit,
     onLeaveGame: () -> Unit
@@ -40,7 +39,6 @@ fun GameScreen(
     val session = state.session ?: return
     var showCatchSheetForHider by remember { mutableStateOf<Player?>(null) }
     var showLeaveConfirmDialog by remember { mutableStateOf(false) }
-    var dismissedCatchConfirmAt by remember { mutableStateOf(0L) }
 
     val remaining = session.remainingSeconds
     val mins = remaining / 60
@@ -429,42 +427,59 @@ fun GameScreen(
                     hasHeading = state.hasCompassHeading
                 )
 
-                // Hider's Personal Catch Code Card
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = AppleCardBackground,
-                    shadowElevation = 6.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                if (state.myPlayer.isCaught) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = AppleCardBackground,
+                        shadowElevation = 6.dp,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column {
+                        Text(
+                            text = "You have been caught",
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppleDangerRed
+                        )
+                    }
+                } else {
+                    // Hider's Personal Catch Code Card
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = AppleCardBackground,
+                        shadowElevation = 6.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Your Catch Code",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AppleTextSecondary
+                                )
+                                Text(
+                                    text = if (state.isInSafeZone) "Protected in Safe Zone (Cannot be tagged)" else "Give only if physically tagged",
+                                    fontSize = 11.sp,
+                                    color = if (state.isInSafeZone) AppleHiderGreen else AppleTextSecondary,
+                                    fontWeight = if (state.isInSafeZone) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+
                             Text(
-                                text = "Your Catch Code",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = AppleTextSecondary
-                            )
-                            Text(
-                                text = if (state.isInSafeZone) "Protected in Safe Zone (Cannot be tagged)" else "Give only if physically tagged",
-                                fontSize = 11.sp,
-                                color = if (state.isInSafeZone) AppleHiderGreen else AppleTextSecondary,
-                                fontWeight = if (state.isInSafeZone) FontWeight.Bold else FontWeight.Normal
+                                text = state.myPlayer.catchCode.ifEmpty { "----" },
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 2.sp,
+                                color = AppleTextPrimary
                             )
                         }
-
-                        Text(
-                            text = state.myPlayer.catchCode.ifEmpty { "----" },
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp,
-                            color = AppleTextPrimary
-                        )
                     }
                 }
             }
@@ -541,46 +556,6 @@ fun GameScreen(
                 onSubmitCatchCode = { enteredPin ->
                     showCatchSheetForHider = null
                     onAttemptCatch(hider.id, enteredPin)
-                }
-            )
-        }
-
-        // A correct code creates a confirmation request for the Hider.
-        val pendingCatch = state.pendingCatchConfirm
-        if (pendingCatch != null &&
-            pendingCatch.status == "PENDING" &&
-            pendingCatch.targetHiderId == state.myPlayer.id &&
-            pendingCatch.createdAtEpochMs != dismissedCatchConfirmAt
-        ) {
-            AlertDialog(
-                onDismissRequest = { dismissedCatchConfirmAt = pendingCatch.createdAtEpochMs },
-                title = { Text("Confirm catch") },
-                text = {
-                    val disputesLeft = state.myPlayer.disputesRemaining
-                    Text(
-                        if (disputesLeft > 0) {
-                            "${pendingCatch.seekerName} entered your correct catch code. Confirm if you were tagged, or dispute the catch if you were not. Disputes left: $disputesLeft."
-                        } else {
-                            "${pendingCatch.seekerName} entered your correct catch code. Confirm the catch to continue."
-                        }
-                    )
-                },
-                confirmButton = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(onClick = { onRespondToCatchConfirm(true) }) {
-                            Text("Confirm catch")
-                        }
-                        if (state.myPlayer.disputesRemaining > 0) {
-                            TextButton(onClick = { onRespondToCatchConfirm(false) }) {
-                                Text("Dispute (${state.myPlayer.disputesRemaining} left)")
-                            }
-                        }
-                        TextButton(onClick = {
-                            dismissedCatchConfirmAt = pendingCatch.createdAtEpochMs
-                        }) {
-                            Text("Later")
-                        }
-                    }
                 }
             )
         }
