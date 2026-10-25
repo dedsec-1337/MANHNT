@@ -29,6 +29,7 @@ data class Player(
     val immunityUntilEpochMs: Long = 0L,
     val isStealthActive: Boolean = false,
     val stealthUntilEpochMs: Long = 0L,
+    val stealthActivationRequestedAtEpochMs: Long = 0L,
     val stealthCooldownUntilEpochMs: Long = 0L,
     val disputesRemaining: Int = 2,
     // A hider writes this request to their own player record; only the room host advances the jailbreak.
