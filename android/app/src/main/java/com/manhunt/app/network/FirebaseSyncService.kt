@@ -59,6 +59,23 @@ interface FirebaseRestApi {
         @Path("joinCode") joinCode: String,
         @Path("playerId") playerId: String
     ): Response<Void>
+
+    @PUT("rooms/{joinCode}/pendingCatchConfirm.json")
+    suspend fun putPendingCatchConfirm(
+        @Path("joinCode") joinCode: String,
+        @Body payload: CatchConfirmPayload
+    ): Response<Void>
+
+    @PATCH("rooms/{joinCode}/pendingCatchConfirm.json")
+    suspend fun patchPendingCatchConfirm(
+        @Path("joinCode") joinCode: String,
+        @Body updates: Map<String, @JvmSuppressWildcards Any>
+    ): Response<Void>
+
+    @DELETE("rooms/{joinCode}/pendingCatchConfirm.json")
+    suspend fun deletePendingCatchConfirm(
+        @Path("joinCode") joinCode: String
+    ): Response<Void>
 }
 
 class FirebaseSyncService private constructor() {
@@ -253,6 +270,40 @@ class FirebaseSyncService private constructor() {
                 response.isSuccessful
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to put catch attempt: ${e.message}")
+                false
+            }
+        }
+    }
+
+    suspend fun createPendingCatchConfirm(joinCode: String, payload: CatchConfirmPayload): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                api.putPendingCatchConfirm(joinCode, payload).isSuccessful
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create catch confirmation: ${e.message}")
+                false
+            }
+        }
+    }
+
+    suspend fun respondToPendingCatchConfirm(joinCode: String, status: String): Boolean {
+        if (status != "ACCEPTED" && status != "REJECTED") return false
+        return withContext(Dispatchers.IO) {
+            try {
+                api.patchPendingCatchConfirm(joinCode, mapOf("status" to status)).isSuccessful
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to respond to catch confirmation: ${e.message}")
+                false
+            }
+        }
+    }
+
+    suspend fun clearPendingCatchConfirm(joinCode: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                api.deletePendingCatchConfirm(joinCode).isSuccessful
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear catch confirmation: ${e.message}")
                 false
             }
         }
