@@ -87,11 +87,18 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
+      - name: Accept Android SDK licenses
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          yes | "$SDKMANAGER" --licenses
       - name: Install Android SDK 34
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
       - uses: gradle/actions/setup-gradle@v4
       - name: Compile Kotlin and assemble debug APK
         working-directory: android
