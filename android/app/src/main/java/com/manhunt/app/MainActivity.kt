@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.manhunt.app.data.model.GameStatus
 import com.manhunt.app.service.ManhuntLocationService
@@ -74,19 +75,30 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    LaunchedEffect(uiState.session?.status) {
+                    val hasLocationPermission = permissionsState.permissions.any { permission ->
+                        permission.status.isGranted &&
+                            (permission.permission == Manifest.permission.ACCESS_FINE_LOCATION ||
+                                permission.permission == Manifest.permission.ACCESS_COARSE_LOCATION)
+                    }
+
+                    LaunchedEffect(uiState.session?.status, hasLocationPermission) {
                         when (uiState.session?.status) {
                             GameStatus.LOBBY -> currentScreen = Screen.LOBBY
                             GameStatus.RUNNING, GameStatus.PAUSED -> {
                                 currentScreen = Screen.GAME
-                                startLocationService(
-                                    remainingSeconds = uiState.session?.remainingSeconds ?: 1800,
-                                    zoneLat = uiState.session?.zoneCenterLat ?: 0.0,
-                                    zoneLng = uiState.session?.zoneCenterLng ?: 0.0,
-                                    zoneRadius = uiState.session?.zoneRadiusMeters ?: 500.0,
-                                    joinCode = uiState.session?.joinCode ?: "",
-                                    playerId = uiState.myPlayer.id
-                                )
+                                if (hasLocationPermission) {
+                                    startLocationService(
+                                        remainingSeconds = uiState.session?.remainingSeconds ?: 1800,
+                                        isPaused = uiState.session?.isPaused ?: false,
+                                        zoneLat = uiState.session?.zoneCenterLat ?: 0.0,
+                                        zoneLng = uiState.session?.zoneCenterLng ?: 0.0,
+                                        zoneRadius = uiState.session?.zoneRadiusMeters ?: 500.0,
+                                        joinCode = uiState.session?.joinCode ?: "",
+                                        playerId = uiState.myPlayer.id
+                                    )
+                                } else {
+                                    Toast.makeText(this@MainActivity, "Location permission is required for GPS tracking.", Toast.LENGTH_SHORT).show()
+                                }
                             }
                             GameStatus.FINISHED -> {
                                 currentScreen = Screen.RESULTS
@@ -188,6 +200,7 @@ class MainActivity : ComponentActivity() {
 
     private fun startLocationService(
         remainingSeconds: Int,
+        isPaused: Boolean,
         zoneLat: Double,
         zoneLng: Double,
         zoneRadius: Double,
@@ -197,6 +210,7 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, ManhuntLocationService::class.java).apply {
             action = ManhuntLocationService.ACTION_START
             putExtra(ManhuntLocationService.EXTRA_REMAINING_SECONDS, remainingSeconds)
+            putExtra(ManhuntLocationService.EXTRA_IS_PAUSED, isPaused)
             putExtra(ManhuntLocationService.EXTRA_ZONE_LAT, zoneLat)
             putExtra(ManhuntLocationService.EXTRA_ZONE_LNG, zoneLng)
             putExtra(ManhuntLocationService.EXTRA_ZONE_RADIUS, zoneRadius)
