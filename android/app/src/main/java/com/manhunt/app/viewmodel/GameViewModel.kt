@@ -442,6 +442,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val session = room.session
         val now = System.currentTimeMillis()
         val isStealthActive = me.isStealthActive && now < me.stealthUntilEpochMs
+        if (me.id == state.myPlayer.id && !state.isStealthActive && isStealthActive) {
+            hapticManager.triggerPowerUp()
+        }
         val canJailbreak = session.jailEnabled && me.role == Role.HIDER && !me.isCaught && !me.isInJail &&
             session.status == GameStatus.RUNNING &&
             GeoUtils.distanceMeters(me.latitude, me.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters &&
@@ -609,7 +612,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             if (!success) handledStealthRequests.remove(requester.id)
-            else if (valid) hapticManager.triggerPowerUp()
         }
     }
 
