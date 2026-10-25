@@ -7,7 +7,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.view.Surface
-import android.view.WindowManager
+import android.hardware.display.DisplayManager
+import android.view.Display
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,7 +21,7 @@ import kotlin.math.exp
 class CompassSensorManager(context: Context) : SensorEventListener {
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-    private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
     private val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private val accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val magneticFieldSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
@@ -130,7 +131,7 @@ class CompassSensorManager(context: Context) : SensorEventListener {
     }
 
     private fun publishScreenHeading(timestampNanos: Long) {
-        val (axisX, axisY) = when (windowManager.defaultDisplay.rotation) {
+        val (axisX, axisY) = when (displayManager.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: Surface.ROTATION_0) {
             Surface.ROTATION_90 ->
                 SensorManager.AXIS_Y to SensorManager.AXIS_MINUS_X
             Surface.ROTATION_180 ->

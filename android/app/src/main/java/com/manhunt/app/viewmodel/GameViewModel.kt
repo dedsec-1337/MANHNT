@@ -633,7 +633,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val activeHiderHeartbeat = me.role == Role.HIDER &&
             !me.isCaught && !me.isInJail &&
             state.session?.status == GameStatus.RUNNING &&
-            state.session?.isPaused == false
+            state.session.isPaused == false
         if (!activeHiderHeartbeat) hapticManager.stop()
 
         if (!GeoUtils.hasValidCoordinates(me.latitude, me.longitude)) {
