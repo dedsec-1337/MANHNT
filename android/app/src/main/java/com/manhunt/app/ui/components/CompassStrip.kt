@@ -97,7 +97,6 @@ fun CompassStrip(
             val pillBg = if (isDanger) AppleDangerRed.copy(alpha = 0.18f) else AppleFill
             val pillText = if (isDanger) Color(0xFFFF3B30) else AppleTextSecondary
             val pillLabel = when {
-                !hasHeading -> "NO COMPASS"
                 distanceMeters <= 0.0 -> "Waiting"
                 distanceMeters < 15.0 -> "CRITICAL"
                 distanceMeters < 50.0 -> "CLOSE"
