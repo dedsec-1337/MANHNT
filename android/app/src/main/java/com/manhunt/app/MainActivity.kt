@@ -170,6 +170,7 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onActivateStealth = { viewModel.activateStealth() },
                                 onStartJailbreak = { viewModel.startJailbreakHold() },
+                                onSendQuickSignal = { code -> viewModel.sendQuickSignal(code) },
                                 onLeaveGame = {
                                     viewModel.leaveGame()
                                     stopLocationService()

@@ -8,6 +8,9 @@ object Constants {
     const val CLOUD_SYNC_POLL_INTERVAL_MS = 2500L
     const val MAX_LOCATION_AGE_MS = 20_000L
     const val MAX_LOCATION_FUTURE_SKEW_MS = 5_000L
+    const val GAME_SIGNAL_MAX_AGE_MS = 15_000L
+    const val GAME_SIGNAL_MAX_FUTURE_SKEW_MS = 5_000L
+    const val GAME_SIGNAL_SEND_COOLDOWN_MS = 1_500L
 
     const val CATCH_PROXIMITY_METERS = 10.0
 

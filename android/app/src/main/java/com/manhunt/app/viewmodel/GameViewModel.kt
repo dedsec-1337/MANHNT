@@ -36,6 +36,7 @@ data class GameUiState(
     val myPlayer: Player = Player(id = UUID.randomUUID().toString(), name = "Runner", avatarEmoji = "🏃"),
     val session: GameSession? = null,
     val players: List<Player> = emptyList(),
+    val roomSignals: Map<String, GameSignalPayload> = emptyMap(),
     val isOrganizer: Boolean = false,
     val headingDegrees: Float = 0f,
     val hasCompassHeading: Boolean = false,
@@ -85,6 +86,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
     private var countdownTimerJob: Job? = null
     private var startGameInFlight = false
+    private var lastQuickSignalSentAtEpochMs = 0L
     private val firebaseAuthMutex = Mutex()
     private var jailbreakJob: Job? = null
     private var lastHandledCatchAttemptTimestamp: Long = 0L
@@ -137,6 +139,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch { ManhuntLocationService.locationUpdates.collect { loc -> handleLocation(loc.latitude, loc.longitude) } }
         viewModelScope.launch { firebaseSync.roomState.collect { if (it != null) applyRoom(it) } }
+        viewModelScope.launch {
+            firebaseSync.roomSignals.collect { signals ->
+                _uiState.update { it.copy(roomSignals = signals) }
+            }
+        }
         viewModelScope.launch { firebaseSync.syncStatus.collect { s -> _uiState.update { it.copy(networkStatus = s) } } }
         viewModelScope.launch {
             while (isActive) {
@@ -573,6 +580,30 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun leaveRoom() = leaveGame()
     fun clearToast() { _uiState.update { it.copy(toastMessage = null) } }
     fun dismissToast() = clearToast()
+
+    fun sendQuickSignal(code: String) {
+        val state = _uiState.value
+        val session = state.session ?: return
+        if (code !in GameSignalCode.allowedCodes ||
+            session.status != GameStatus.RUNNING ||
+            session.isPaused
+        ) return
+
+        val nowEpochMs = System.currentTimeMillis()
+        if (nowEpochMs - lastQuickSignalSentAtEpochMs < Constants.GAME_SIGNAL_SEND_COOLDOWN_MS) return
+        lastQuickSignalSentAtEpochMs = nowEpochMs
+        val signal = GameSignalPayload(code = code, timestampEpochMs = nowEpochMs)
+
+        viewModelScope.launch {
+            val sent = firebaseSync.sendQuickSignal(session.joinCode, state.myPlayer.id, signal)
+            if (!sent) {
+                lastQuickSignalSentAtEpochMs = 0L
+                _uiState.update {
+                    it.copy(toastMessage = "Signal could not sync. Check your connection and ask the host to update the Firebase rules if this continues.")
+                }
+            }
+        }
+    }
 
     private fun applyRoom(room: RoomNetworkModel) {
         val state = _uiState.value
