@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -85,6 +86,10 @@ dependencies {
     // Google Play Services Location (FusedLocationProviderClient)
     implementation("com.google.android.gms:play-services-location:21.2.0")
 
+    // Firebase (Auth for RTDB rules; RTDB still via REST)
+    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+
     // Room Database
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
@@ -96,6 +101,7 @@ dependencies {
     // Kotlin Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.0")
 
     // Retrofit 2 & OkHttp 3 for Firebase Realtime Database REST API
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "166830439365",
+    "firebase_url": "https://manhnt-ba00c-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "manhnt-ba00c",
+    "storage_bucket": "manhnt-ba00c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:166830439365:android:007a71cc2c11689123e9ac",
+        "android_client_info": {
+          "package_name": "com.manhunt.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-kMlYM6LXJfEJcfxuCLpbY82RV6_kRNc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
