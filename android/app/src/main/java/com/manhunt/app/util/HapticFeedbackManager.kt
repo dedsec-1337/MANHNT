@@ -49,6 +49,11 @@ class HapticFeedbackManager(context: Context) {
         }
     }
 
+    fun stop() {
+        vibrator?.cancel()
+        lastVibrateTimestamp = 0L
+    }
+
     fun triggerNearAlert() = pulse(longArrayOf(0, 180), intArrayOf(0, 180))
     fun triggerCriticalAlert() = pulse(longArrayOf(0, 120, 70, 120), intArrayOf(0, 255, 0, 255))
     fun triggerCatchConfirmation() = pulse(longArrayOf(0, 250), intArrayOf(0, 200))
