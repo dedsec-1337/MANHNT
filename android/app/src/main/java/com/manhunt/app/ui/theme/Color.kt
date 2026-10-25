@@ -5,21 +5,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 
-// Light Palette (Apple-inspired Clean Light)
-val AppleBackgroundLight = Color(0xFFF8F9FA)
-val AppleSurfaceLight = Color(0xFFFFFFFF)
-val AppleCardBackgroundLight = Color(0xFFFFFFFF)
-val AppleTextPrimaryLight = Color(0xFF1C1C1E)
-val AppleTextSecondaryLight = Color(0xFF8E8E93)
-val AppleDividerLight = Color(0xFFE5E5EA)
+// Field Play warm light palette.
+val AppleBackgroundLight = Color(0xFFF3F1E9)
+val AppleSurfaceLight = Color(0xFFFAF9F4)
+val AppleCardBackgroundLight = Color(0xFFFAF9F4)
+val AppleTextPrimaryLight = Color(0xFF242522)
+val AppleTextSecondaryLight = Color(0xFF73746D)
+val AppleDividerLight = Color(0xFFD7D4CB)
 
 // Dark Palette (Apple-inspired OLED Dark)
 val AppleBackgroundDark = Color(0xFF000000)
-val AppleSurfaceDark = Color(0xFF1C1C1E)
-val AppleCardBackgroundDark = Color(0xFF1C1C1E)
-val AppleTextPrimaryDark = Color(0xFFF5F5F7)
-val AppleTextSecondaryDark = Color(0xFF98989D)
-val AppleDividerDark = Color(0xFF2C2C2E)
+val AppleSurfaceDark = Color(0xFF121311)
+val AppleCardBackgroundDark = Color(0xFF121311)
+val AppleTextPrimaryDark = Color(0xFFF3F1E9)
+val AppleTextSecondaryDark = Color(0xFFA6A59F)
+val AppleDividerDark = Color(0xFF30312E)
 
 // Theme-aware aliases (follow light/dark ColorScheme from ManhuntTheme)
 val AppleTextPrimary: Color
@@ -36,9 +36,11 @@ val AppleInputBackground: Color
     @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.background
 
 // Shared Accents
-val AppleAccentBlue = Color(0xFF007AFF)
-val AppleAccentBlueDark = Color(0xFF0A84FF)
-val AppleSeekerOrange = Color(0xFFFF9500)
+val AppleAccentBlue: Color
+    @Composable @ReadOnlyComposable get() = MaterialTheme.colorScheme.primary
+val AppleAccentBlueDark = Color(0xFF9BB8D0)
+val AppleSeekerOrange = Color(0xFFBC604A)
+val AppleHiderPurple = Color(0xFF8474A3)
 val AppleHiderGreen = Color(0xFF34C759)
 val AppleDangerRed = Color(0xFFFF3B30)
 

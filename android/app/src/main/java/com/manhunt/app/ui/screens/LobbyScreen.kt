@@ -36,7 +36,8 @@ fun LobbyScreen(
     onStartGameClick: () -> Unit,
     onToggleRole: (playerId: String) -> Unit,
     onAutoBalanceRoles: () -> Unit,
-    onLeaveLobbyClick: () -> Unit
+    onLeaveLobbyClick: () -> Unit,
+    isActiveMatch: Boolean = false
 ) {
     val session = state.session
     if (session == null) {
@@ -92,12 +93,14 @@ fun LobbyScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onLeaveLobbyClick) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Leave",
-                            tint = AppleTextPrimary
-                        )
+                    if (!isActiveMatch) {
+                        IconButton(onClick = onLeaveLobbyClick) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Leave",
+                                tint = AppleTextPrimary
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
@@ -112,6 +115,17 @@ fun LobbyScreen(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (isActiveMatch) {
+                item {
+                    AppleCard {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Crew in the field", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AppleTextPrimary)
+                            Text("Your roster stays here while the hunt is live.", fontSize = 13.sp, color = AppleTextSecondary)
+                        }
+                    }
+                }
+            }
+
             // Join Code Hero Card
             item {
                 AppleCard {
@@ -282,14 +296,14 @@ fun LobbyScreen(
                             text = "$seekersCount Seekers",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFD97706)
+                            color = AppleSeekerOrange
                         )
                         Text(text = "•", fontSize = 12.sp, color = AppleTextSecondary)
                         Text(
                             text = "$hidersCount Hiders",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF16A34A)
+                            color = AppleHiderPurple
                         )
                     }
                 }
@@ -362,7 +376,7 @@ fun LobbyScreen(
                         ) {
                             RoleBadge(role = player.role)
 
-                            if (state.isOrganizer) {
+                            if (state.isOrganizer && !isActiveMatch) {
                                 TextButton(
                                     onClick = { onToggleRole(player.id) },
                                     contentPadding = PaddingValues(horizontal = 8.dp)
@@ -376,7 +390,7 @@ fun LobbyScreen(
             }
 
             // Organizer Controls
-            if (state.isOrganizer) {
+            if (state.isOrganizer && !isActiveMatch) {
                 item {
                     Spacer(modifier = Modifier.height(10.dp))
                     AppleSecondaryButton(
@@ -394,7 +408,7 @@ fun LobbyScreen(
                         onClick = onStartGameClick
                     )
                 }
-            } else {
+            } else if (!isActiveMatch) {
                 item {
                     AppleCard {
                         Row(
