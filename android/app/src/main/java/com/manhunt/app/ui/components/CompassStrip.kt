@@ -1,8 +1,6 @@
 package com.manhunt.app.ui.components
 
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +33,7 @@ import com.manhunt.app.ui.theme.AppleDangerRed
 import com.manhunt.app.ui.theme.AppleSeekerOrange
 import com.manhunt.app.ui.theme.AppleTextPrimary
 import com.manhunt.app.ui.theme.AppleTextSecondary
+import com.manhunt.app.ui.theme.MotionTokens
 import com.manhunt.app.util.GeoUtils
 import kotlin.math.cos
 import kotlin.math.sin
@@ -54,7 +53,7 @@ fun CompassStrip(
     }
     val relativeAngle by animateFloatAsState(
         targetValue = targetAngle,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = MotionTokens.Compass,
         label = "nearestHunterCompass"
     )
     val colors = MaterialTheme.colorScheme

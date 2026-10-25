@@ -3,7 +3,6 @@ package com.manhunt.app.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -30,6 +29,7 @@ import com.manhunt.app.ui.components.*
 import com.manhunt.app.ui.theme.*
 import com.manhunt.app.viewmodel.GameUiState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 
 
 private data class QuickSignalOption(
@@ -57,6 +57,7 @@ private val QUICK_CHAT_OPTIONS = listOf(
 @Composable
 fun GameScreen(
     state: GameUiState,
+    headingFlow: StateFlow<Float>,
     onToggleSafetyPause: () -> Unit,
     onAttemptCatch: (targetHiderId: String, code: String) -> Unit,
     onActivateStealth: () -> Unit,
@@ -109,20 +110,9 @@ fun GameScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         if (state.myPlayer.role == Role.SEEKER) {
-            OSMMapView(
-                playerLat = state.myPlayer.latitude,
-                playerLng = state.myPlayer.longitude,
-                userRole = state.myPlayer.role,
-                zoneCenterLat = session.zoneCenterLat,
-                zoneCenterLng = session.zoneCenterLng,
-                zoneRadiusMeters = state.currentDynamicRadiusMeters,
-                isUnlimitedZone = session.isUnlimitedZone,
-                safeZones = session.safeZones,
-                isAutoPingActive = state.isAutoPingActive,
-                otherPlayers = state.players.filter { it.id != state.myPlayer.id },
-                headingDegrees = state.headingDegrees,
-                hasHeading = state.hasCompassHeading,
-                playerLocationUpdatedAtEpochMs = state.myPlayer.lastUpdatedEpochMs,
+            GameMapLayer(
+                state = state,
+                headingFlow = headingFlow,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -520,8 +510,8 @@ fun GameScreen(
         ) {
             // A. If Hider: Display Rotary Compass pointing to nearest Seeker + Display Catch Code
             if (state.myPlayer.role == Role.HIDER) {
-                CompassStrip(
-                    deviceHeading = state.headingDegrees,
+                GameCompassLayer(
+                    headingFlow = headingFlow,
                     targetBearing = state.nearestSeekerBearing,
                     distanceMeters = state.nearestSeekerDistance,
                     hasHeading = state.hasCompassHeading
@@ -779,8 +769,8 @@ fun GameScreen(
         AnimatedVisibility(
             visible = recentSignalFeedback != null,
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 92.dp),
-            enter = fadeIn(tween(MotionTokens.FeedbackMillis)) + slideInVertically(tween(MotionTokens.FeedbackMillis)) { it / 2 },
-            exit = fadeOut(tween(MotionTokens.FeedbackMillis)) + slideOutVertically(tween(MotionTokens.FeedbackMillis)) { it / 2 }
+            enter = fadeIn(MotionTokens.smoothTween(MotionTokens.FeedbackMillis)) + slideInVertically(MotionTokens.CardOffset) { it / 3 },
+            exit = fadeOut(MotionTokens.smoothTween(MotionTokens.FeedbackMillis)) + slideOutVertically(MotionTokens.CardOffset) { it / 3 }
         ) {
             Surface(
                 shape = RoundedCornerShape(24.dp),
@@ -819,4 +809,46 @@ fun GameScreen(
             )
         }
     }
+}
+
+@Composable
+private fun GameMapLayer(
+    state: GameUiState,
+    headingFlow: StateFlow<Float>,
+    modifier: Modifier
+) {
+    val headingDegrees by headingFlow.collectAsState()
+    val session = state.session ?: return
+    OSMMapView(
+        playerLat = state.myPlayer.latitude,
+        playerLng = state.myPlayer.longitude,
+        userRole = state.myPlayer.role,
+        zoneCenterLat = session.zoneCenterLat,
+        zoneCenterLng = session.zoneCenterLng,
+        zoneRadiusMeters = state.currentDynamicRadiusMeters,
+        isUnlimitedZone = session.isUnlimitedZone,
+        safeZones = session.safeZones,
+        isAutoPingActive = state.isAutoPingActive,
+        otherPlayers = state.players.filter { it.id != state.myPlayer.id },
+        headingDegrees = headingDegrees,
+        hasHeading = state.hasCompassHeading,
+        playerLocationUpdatedAtEpochMs = state.myPlayer.lastUpdatedEpochMs,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun GameCompassLayer(
+    headingFlow: StateFlow<Float>,
+    targetBearing: Float,
+    distanceMeters: Double,
+    hasHeading: Boolean
+) {
+    val headingDegrees by headingFlow.collectAsState()
+    CompassStrip(
+        deviceHeading = headingDegrees,
+        targetBearing = targetBearing,
+        distanceMeters = distanceMeters,
+        hasHeading = hasHeading
+    )
 }

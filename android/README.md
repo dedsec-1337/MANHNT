@@ -53,18 +53,9 @@ object Constants {
 ```
 
 ### 2. Realtime Database Security Rules
-In your [Firebase Console](https://console.firebase.google.com/), open **Realtime Database > Rules** and set:
+Use the restricted, validated rules in [`firebase/database.rules.example.json`](../firebase/database.rules.example.json) as the version-controlled source. The rules deny reads and writes by default; authenticated users can read the minimal `joinInfo` record for room lookup, while session, location, and gameplay data use narrower membership or role checks.
 
-```json
-{
-  "rules": {
-    "rooms": {
-      ".read": true,
-      ".write": true
-    }
-  }
-}
-```
+Do not publish broad rules such as `".read": true` or `".write": true`; they expose live room data and let anyone change it. Check the Firebase Emulator rule checks and verify the app's room flows before publishing an updated ruleset. Appearance, animation, and other local UI changes do not require Firebase rule changes.
 
 ---
 

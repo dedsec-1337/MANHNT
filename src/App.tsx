@@ -1674,11 +1674,7 @@ export default function App() {
                         https://manhnt-ba00c-default-rtdb.asia-southeast1.firebasedatabase.app/
                       </code>
                       <br />
-                      Ensure Realtime Database rules allow read and write access for rooms:
-                      <br />
-                      <code className="font-mono text-[10px] bg-black/30 px-1 py-0.5 rounded text-amber-300">
-                        &#123; "rules": &#123; "rooms": &#123; ".read": true, ".write": true &#125; &#125; &#125;
-                      </code>
+                      Publish the restricted rules in <code>firebase/database.rules.example.json</code> only after checking them with the Firebase Emulator. Never use open room read or write rules; they expose live rooms and let anyone change game data.
                     </p>
                   </div>
                 </div>

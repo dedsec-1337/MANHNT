@@ -37,13 +37,13 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF30312E),
+    primary = Color(0xFFD8D7CE),
     secondary = AppleSeekerOrange,
     tertiary = AppleHiderPurple,
     background = AppleBackgroundDark,
     surface = AppleSurfaceDark,
     surfaceVariant = Color(0xFF30312E),
-    onPrimary = Color(0xFFF3F1E9),
+    onPrimary = Color(0xFF242522),
     onSecondary = Color.White,
     onTertiary = Color.White,
     onBackground = AppleTextPrimaryDark,
@@ -82,8 +82,8 @@ fun ManhuntTheme(
     val colorScheme: ColorScheme = when (settings.accent) {
         AccentMode.DEFAULT, AccentMode.SYSTEM_COLORS -> systemColorScheme
         AccentMode.BLUE -> systemColorScheme.copy(
-            primary = if (darkTheme) Color(0xFF4A6A83) else Color(0xFF48677D),
-            onPrimary = Color.White
+            primary = if (darkTheme) AppleAccentBlueDark else Color(0xFF48677D),
+            onPrimary = if (darkTheme) Color(0xFF171A1D) else Color.White
         )
     }
     val view = LocalView.current
