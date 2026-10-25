@@ -4,7 +4,7 @@
     ".write": false,
     "rooms": {
       "$joinCode": {
-        ".read": "auth != null && data.child('players').child(auth.uid).exists()",
+        ".read": false,
         ".write": "auth != null && !data.exists() && newData.child('session').child('hostPlayerId').val() === auth.uid && newData.child('session').child('joinCode').val() === $joinCode",
         "session": {
           ".write": "auth != null && data.exists() && data.child('hostPlayerId').val() === auth.uid && newData.child('hostPlayerId').val() === auth.uid",
@@ -101,7 +101,59 @@
           },
           ".read": "auth != null"
         },
-        "players": {
+        "lastCatchAttempt": {
+          ".write": "auth != null && newData.exists() && newData.child('seekerId').val() === auth.uid && root.child('rooms').child($joinCode).child('session').child('status').val() === 'RUNNING' && root.child('rooms').child($joinCode).child('session').child('isPaused').val() !== true && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).child('role').val() === 'SEEKER' && root.child('rooms').child($joinCode).child('publicPlayers').child(newData.child('targetHiderId').val()).child('role').val() === 'HIDER' && newData.child('targetHiderId').val() !== auth.uid && root.child('roomPrivate').child($joinCode).child('catchCodes').child(newData.child('targetHiderId').val()).val() === newData.child('enteredCode').val()",
+          ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'enteredCode', 'timestamp']) && newData.child('seekerId').isString() && newData.child('targetHiderId').isString() && newData.child('enteredCode').isString() && newData.child('timestamp').isNumber() && newData.child('timestamp').val() >= 0 && newData.child('enteredCode').val().matches(/^[0-9]{4}$/)",
+          "seekerId": {
+            ".validate": "newData.isString() && newData.val() === auth.uid"
+          },
+          "targetHiderId": {
+            ".validate": "newData.isString() && newData.val() !== auth.uid"
+          },
+          "enteredCode": {
+            ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}$/)"
+          },
+          "timestamp": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "$other": {
+            ".validate": false
+          },
+          ".read": "auth != null && root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid"
+        },
+        "pendingCatchConfirm": {
+          ".write": "auth != null && ((root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid) || (data.exists() && data.child('status').val() === 'PENDING' && data.child('targetHiderId').val() === auth.uid && newData.child('seekerId').val() === data.child('seekerId').val() && newData.child('targetHiderId').val() === data.child('targetHiderId').val() && newData.child('seekerName').val() === data.child('seekerName').val() && newData.child('distanceMeters').val() === data.child('distanceMeters').val() && newData.child('createdAtEpochMs').val() === data.child('createdAtEpochMs').val() && newData.child('expiresAtEpochMs').val() === data.child('expiresAtEpochMs').val() && (newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')))",
+          ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'seekerName', 'distanceMeters', 'createdAtEpochMs', 'expiresAtEpochMs', 'status']) && newData.child('seekerId').isString() && newData.child('targetHiderId').isString() && newData.child('seekerId').val() !== newData.child('targetHiderId').val() && newData.child('seekerName').isString() && newData.child('distanceMeters').isNumber() && newData.child('distanceMeters').val() >= 0 && newData.child('createdAtEpochMs').isNumber() && newData.child('expiresAtEpochMs').isNumber() && (newData.child('status').val() === 'PENDING' || newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')",
+          "seekerId": {
+            ".validate": "newData.isString()"
+          },
+          "targetHiderId": {
+            ".validate": "newData.isString()"
+          },
+          "seekerName": {
+            ".validate": "newData.isString()"
+          },
+          "distanceMeters": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "createdAtEpochMs": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "expiresAtEpochMs": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          },
+          "status": {
+            ".validate": "newData.isString() && (newData.val() === 'PENDING' || newData.val() === 'ACCEPTED' || newData.val() === 'REJECTED')"
+          },
+          "$other": {
+            ".validate": false
+          },
+          ".read": "auth != null && (root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid || data.child('targetHiderId').val() === auth.uid)"
+        },
+        "$other": {
+          ".validate": false
+        },
+        "publicPlayers": {
           "$playerId": {
             ".write": "auth != null && ((root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid) || ($playerId === auth.uid && !newData.exists()) || ($playerId === auth.uid && ((!data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === 'SEEKER') || (data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === data.child('role').val() && newData.child('isCaught').val() === data.child('isCaught').val() && newData.child('isInJail').val() === data.child('isInJail').val() && newData.child('immunityUntilEpochMs').val() === data.child('immunityUntilEpochMs').val() && newData.child('disputesRemaining').val() === data.child('disputesRemaining').val() && newData.child('isInSafeZone').val() === data.child('isInSafeZone').val() && newData.child('safeZoneName').val() === data.child('safeZoneName').val() && newData.child('isStealthActive').val() === data.child('isStealthActive').val() && newData.child('stealthUntilEpochMs').val() === data.child('stealthUntilEpochMs').val() && newData.child('stealthCooldownUntilEpochMs').val() === data.child('stealthCooldownUntilEpochMs').val()))))",
             ".validate": "newData.hasChildren(['id', 'name', 'role']) && newData.child('id').val() === $playerId && (newData.child('role').val() === 'SEEKER' || newData.child('role').val() === 'HIDER')",
@@ -153,66 +205,17 @@
             "stealthActivationRequestedAtEpochMs": {
               ".validate": "newData.isNumber() && newData.val() >= 0"
             }
-          }
-        },
-        "lastCatchAttempt": {
-          ".write": "auth != null && newData.exists() && newData.child('seekerId').val() === auth.uid && root.child('rooms').child($joinCode).child('session').child('status').val() === 'RUNNING' && root.child('rooms').child($joinCode).child('session').child('isPaused').val() !== true && root.child('rooms').child($joinCode).child('players').child(auth.uid).child('role').val() === 'SEEKER' && root.child('rooms').child($joinCode).child('players').child(newData.child('targetHiderId').val()).child('role').val() === 'HIDER' && newData.child('targetHiderId').val() !== auth.uid && root.child('roomPrivate').child($joinCode).child('catchCodes').child(newData.child('targetHiderId').val()).val() === newData.child('enteredCode').val()",
-          ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'enteredCode', 'timestamp']) && newData.child('seekerId').isString() && newData.child('targetHiderId').isString() && newData.child('enteredCode').isString() && newData.child('timestamp').isNumber() && newData.child('timestamp').val() >= 0 && newData.child('enteredCode').val().matches(/^[0-9]{4}$/)",
-          "seekerId": {
-            ".validate": "newData.isString() && newData.val() === auth.uid"
           },
-          "targetHiderId": {
-            ".validate": "newData.isString() && newData.val() !== auth.uid"
-          },
-          "enteredCode": {
-            ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}$/)"
-          },
-          "timestamp": {
-            ".validate": "newData.isNumber() && newData.val() >= 0"
-          },
-          "$other": {
-            ".validate": false
-          }
-        },
-        "pendingCatchConfirm": {
-          ".write": "auth != null && ((root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid) || (data.exists() && data.child('status').val() === 'PENDING' && data.child('targetHiderId').val() === auth.uid && newData.child('seekerId').val() === data.child('seekerId').val() && newData.child('targetHiderId').val() === data.child('targetHiderId').val() && newData.child('seekerName').val() === data.child('seekerName').val() && newData.child('distanceMeters').val() === data.child('distanceMeters').val() && newData.child('createdAtEpochMs').val() === data.child('createdAtEpochMs').val() && newData.child('expiresAtEpochMs').val() === data.child('expiresAtEpochMs').val() && (newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')))",
-          ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'seekerName', 'distanceMeters', 'createdAtEpochMs', 'expiresAtEpochMs', 'status']) && newData.child('seekerId').isString() && newData.child('targetHiderId').isString() && newData.child('seekerId').val() !== newData.child('targetHiderId').val() && newData.child('seekerName').isString() && newData.child('distanceMeters').isNumber() && newData.child('distanceMeters').val() >= 0 && newData.child('createdAtEpochMs').isNumber() && newData.child('expiresAtEpochMs').isNumber() && (newData.child('status').val() === 'PENDING' || newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')",
-          "seekerId": {
-            ".validate": "newData.isString()"
-          },
-          "targetHiderId": {
-            ".validate": "newData.isString()"
-          },
-          "seekerName": {
-            ".validate": "newData.isString()"
-          },
-          "distanceMeters": {
-            ".validate": "newData.isNumber() && newData.val() >= 0"
-          },
-          "createdAtEpochMs": {
-            ".validate": "newData.isNumber() && newData.val() >= 0"
-          },
-          "expiresAtEpochMs": {
-            ".validate": "newData.isNumber() && newData.val() >= 0"
-          },
-          "status": {
-            ".validate": "newData.isString() && (newData.val() === 'PENDING' || newData.val() === 'ACCEPTED' || newData.val() === 'REJECTED')"
-          },
-          "$other": {
-            ".validate": false
-          }
-        },
-        "$other": {
-          ".validate": false
+          ".read": "auth != null && data.child(auth.uid).exists()"
         }
       }
     },
     "roomPrivate": {
       "$joinCode": {
         "locations": {
-          ".read": "auth != null && root.child('rooms').child($joinCode).child('players').child(auth.uid).exists()",
+          ".read": "auth != null && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).exists()",
           "$playerId": {
-            ".write": "auth != null && $playerId === auth.uid && root.child('rooms').child($joinCode).child('players').child(auth.uid).exists()",
+            ".write": "auth != null && $playerId === auth.uid && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).exists()",
             ".validate": "newData.hasChildren(['latitude', 'longitude', 'isOutOfZone', 'lastUpdatedEpochMs'])",
             "latitude": {
               ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
@@ -235,7 +238,7 @@
           ".read": "auth != null && root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid",
           "$playerId": {
             ".read": "auth != null && ($playerId === auth.uid || root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid)",
-            ".write": "auth != null && root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid && root.child('rooms').child($joinCode).child('players').child($playerId).exists()",
+            ".write": "auth != null && root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid && root.child('rooms').child($joinCode).child('publicPlayers').child($playerId).exists()",
             ".validate": "newData.isString() && (newData.val() === '' || newData.val().matches(/^[0-9]{4}$/))"
           }
         }
