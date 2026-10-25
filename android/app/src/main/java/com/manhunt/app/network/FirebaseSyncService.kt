@@ -28,6 +28,40 @@ interface FirebaseRestApi {
         @Path("joinCode") joinCode: String
     ): Response<RoomNetworkModel?>
 
+    @GET("rooms/{joinCode}/session.json")
+    suspend fun getSession(
+        @Path("joinCode") joinCode: String
+    ): Response<GameSession?>
+
+    @GET("roomPrivate/{joinCode}/locations.json")
+    suspend fun getLocations(
+        @Path("joinCode") joinCode: String
+    ): Response<Map<String, LocationPayload>?>
+
+    @PUT("roomPrivate/{joinCode}/locations/{playerId}.json")
+    suspend fun putLocation(
+        @Path("joinCode") joinCode: String,
+        @Path("playerId") playerId: String,
+        @Body location: LocationPayload
+    ): Response<Void>
+
+    @GET("roomPrivate/{joinCode}/catchCodes.json")
+    suspend fun getCatchCodes(
+        @Path("joinCode") joinCode: String
+    ): Response<Map<String, String>?>
+
+    @GET("roomPrivate/{joinCode}/catchCodes/{playerId}.json")
+    suspend fun getCatchCode(
+        @Path("joinCode") joinCode: String,
+        @Path("playerId") playerId: String
+    ): Response<String?>
+
+    @PUT("roomPrivate/{joinCode}/catchCodes/{playerId}.json")
+    suspend fun putCatchCode(
+        @Path("joinCode") joinCode: String,
+        @Path("playerId") playerId: String,
+        @Body catchCode: String
+    ): Response<Void>
     @PUT("rooms/{joinCode}/players/{playerId}.json")
     suspend fun putPlayer(
         @Path("joinCode") joinCode: String,
@@ -139,20 +173,58 @@ class FirebaseSyncService private constructor() {
         }
     }
 
+    suspend fun fetchRoomSession(joinCode: String): GameSession? {
+        return try {
+            val response = api.getSession(joinCode)
+            if (response.isSuccessful) response.body() else null
+        } catch (e: Exception) {
+            Log.e(TAG, "Network error fetching room session: ${e.message}")
+            null
+        }
+    }
+
     suspend fun fetchRoomData(joinCode: String): RoomNetworkModel? {
         return try {
             _syncStatus.value = NetworkSyncStatus.SYNCING
             val response = api.getRoom(joinCode)
-            if (response.isSuccessful) {
-                _syncStatus.value = NetworkSyncStatus.ONLINE
-                val data = response.body()
-                _roomState.value = data
-                data
-            } else {
+            if (!response.isSuccessful) {
                 Log.w(TAG, "Get room response code: ${response.code()}")
                 _syncStatus.value = NetworkSyncStatus.OFFLINE
-                null
+                return null
             }
+            val data = response.body() ?: return null
+            val locationResponse = api.getLocations(joinCode)
+            if (!locationResponse.isSuccessful) {
+                Log.w(TAG, "Get private locations response code: ${locationResponse.code()}")
+                _syncStatus.value = NetworkSyncStatus.OFFLINE
+                return null
+            }
+            val locations = locationResponse.body().orEmpty()
+            val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+            val catchCodes = if (uid == data.session.hostPlayerId) {
+                val codesResponse = api.getCatchCodes(joinCode)
+                if (codesResponse.isSuccessful) codesResponse.body().orEmpty() else {
+                    Log.w(TAG, "Get host catch codes response code: ${codesResponse.code()}")
+                    emptyMap()
+                }
+            } else {
+                val codeResponse = api.getCatchCode(joinCode, uid)
+                if (codeResponse.isSuccessful) mapOf(uid to (codeResponse.body() ?: "")) else emptyMap()
+            }
+            val mergedPlayers = data.players.mapValues { (playerId, player) ->
+                val location = locations[playerId]
+                player.copy(
+                    catchCode = catchCodes[playerId] ?: "",
+                    latitude = location?.latitude ?: 0.0,
+                    longitude = location?.longitude ?: 0.0,
+                    isOutOfZone = location?.isOutOfZone ?: false,
+                    lastUpdatedEpochMs = location?.lastUpdatedEpochMs ?: 0L
+                )
+            }
+            val merged = data.copy(players = mergedPlayers)
+            _syncStatus.value = NetworkSyncStatus.ONLINE
+            _roomState.value = merged
+            merged
         } catch (e: Exception) {
             Log.e(TAG, "Network error fetching room data: ${e.message}")
             _syncStatus.value = NetworkSyncStatus.OFFLINE
@@ -168,11 +240,20 @@ class FirebaseSyncService private constructor() {
             try {
                 _syncStatus.value = NetworkSyncStatus.SYNCING
                 val response = api.createRoom(room.session.joinCode, room)
-                val success = response.isSuccessful
-                _syncStatus.value = if (success) NetworkSyncStatus.ONLINE else NetworkSyncStatus.OFFLINE
+                var success = response.isSuccessful
                 if (success) {
-                    startRoomSync(room.session.joinCode)
+                    room.players.values.forEach { player ->
+                        val location = LocationPayload(
+                            latitude = player.latitude,
+                            longitude = player.longitude,
+                            isOutOfZone = player.isOutOfZone,
+                            lastUpdatedEpochMs = player.lastUpdatedEpochMs
+                        )
+                        if (!api.putLocation(room.session.joinCode, player.id, location).isSuccessful) success = false
+                    }
                 }
+                _syncStatus.value = if (success) NetworkSyncStatus.ONLINE else NetworkSyncStatus.OFFLINE
+                if (success) startRoomSync(room.session.joinCode)
                 success
             } catch (e: Exception) {
                 Log.e(TAG, "Error creating room on Firebase: ${e.message}")
@@ -204,6 +285,18 @@ class FirebaseSyncService private constructor() {
         }
     }
 
+    suspend fun setCatchCode(joinCode: String, playerId: String, catchCode: String): Boolean {
+        if (catchCode.isNotEmpty() && !catchCode.matches(Regex("^[0-9]{4}$"))) return false
+        return withContext(Dispatchers.IO) {
+            try {
+                api.putCatchCode(joinCode, playerId, catchCode).isSuccessful
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set private catch code: ${e.message}")
+                false
+            }
+        }
+    }
+
     /**
      * Partial player update via PATCH /rooms/{join_code}/players/{player_id}.json
      */
@@ -230,13 +323,16 @@ class FirebaseSyncService private constructor() {
     ): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val updates = mapOf(
-                    "latitude" to lat,
-                    "longitude" to lng,
-                    "isOutOfZone" to isOutOfZone,
-                    "lastUpdatedEpochMs" to System.currentTimeMillis()
+                val response = api.putLocation(
+                    joinCode,
+                    playerId,
+                    LocationPayload(
+                        latitude = lat,
+                        longitude = lng,
+                        isOutOfZone = isOutOfZone,
+                        lastUpdatedEpochMs = System.currentTimeMillis()
+                    )
                 )
-                val response = api.patchPlayerLocation(joinCode, playerId, updates)
                 response.isSuccessful
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to patch location: ${e.message}")
