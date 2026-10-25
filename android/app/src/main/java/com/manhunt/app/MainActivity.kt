@@ -156,7 +156,6 @@ class MainActivity : ComponentActivity() {
                                 onAttemptCatch = { targetHiderId, code ->
                                     viewModel.attemptCatch(targetHiderId, code) { _, _ -> }
                                 },
-                                onRespondToCatchConfirm = { accept -> viewModel.respondToCatchConfirm(accept) },
                                 onActivateStealth = { viewModel.activateStealth() },
                                 onStartJailbreak = { viewModel.startJailbreakHold() },
                                 onLeaveGame = {
