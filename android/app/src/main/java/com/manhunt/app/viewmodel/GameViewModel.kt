@@ -506,6 +506,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val caught = target.copy(isCaught = true, isInJail = sendToJail, isStealthActive = false)
         viewModelScope.launch {
             if (firebaseSync.joinPlayer(session.joinCode, caught)) {
+                _uiState.update { current ->
+                    current.copy(players = current.players.map { player -> if (player.id == target.id) caught else player })
+                }
                 val remainingHiders = state.players.filter { it.role == Role.HIDER && it.id != target.id && !it.isCaught }
                 if (remainingHiders.isEmpty()) endGame(Role.SEEKER)
             }
