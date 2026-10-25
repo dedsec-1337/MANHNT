@@ -32,6 +32,7 @@ fun GameScreen(
     state: GameUiState,
     onToggleSafetyPause: () -> Unit,
     onAttemptCatch: (targetHiderId: String, code: String) -> Unit,
+    onRespondToCatchConfirm: (accept: Boolean) -> Unit,
     onActivateStealth: () -> Unit,
     onStartJailbreak: () -> Unit,
     onLeaveGame: () -> Unit
@@ -535,6 +536,40 @@ fun GameScreen(
                 onSubmitCatchCode = { enteredPin ->
                     showCatchSheetForHider = null
                     onAttemptCatch(hider.id, enteredPin)
+                }
+            )
+        }
+
+        // A correct code creates a confirmation request for the Hider.
+        val pendingCatch = state.pendingCatchConfirm
+        if (pendingCatch != null &&
+            pendingCatch.status == "PENDING" &&
+            pendingCatch.targetHiderId == state.myPlayer.id
+        ) {
+            AlertDialog(
+                onDismissRequest = {},
+                title = { Text("Confirm catch") },
+                text = {
+                    val disputesLeft = state.myPlayer.disputesRemaining
+                    Text(
+                        if (disputesLeft > 0) {
+                            "${pendingCatch.seekerName} entered your correct catch code. Confirm if you were tagged, or dispute the catch if you were not. Disputes left: $disputesLeft."
+                        } else {
+                            "${pendingCatch.seekerName} entered your correct catch code. Confirm the catch to continue."
+                        }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { onRespondToCatchConfirm(true) }) {
+                        Text("Confirm catch")
+                    }
+                },
+                dismissButton = {
+                    if (state.myPlayer.disputesRemaining > 0) {
+                        TextButton(onClick = { onRespondToCatchConfirm(false) }) {
+                            Text("Dispute (${state.myPlayer.disputesRemaining} left)")
+                        }
+                    }
                 }
             )
         }
