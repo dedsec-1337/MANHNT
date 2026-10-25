@@ -425,7 +425,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             GeoUtils.distanceMeters(lat, lng, zone.latitude, zone.longitude) <= zone.radiusMeters
         }
         val now = System.currentTimeMillis()
-        val me = _uiState.value.myPlayer.copy(
+        val previousMe = _uiState.value.myPlayer
+        val me = previousMe.copy(
             latitude = lat,
             longitude = lng,
             isOutOfZone = geofence.isOutside,
@@ -446,6 +447,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val seekerFrozen = me.role == Role.SEEKER && (session?.headStartRemainingSeconds ?: 0) > 0
         if (!seekerFrozen && session != null && session.status == GameStatus.RUNNING && session.joinCode.isNotEmpty()) {
             viewModelScope.launch { firebaseSync.updateLocation(session.joinCode, me.id, lat, lng, geofence.isOutside) }
+        }
+        if (session != null && session.joinCode.isNotEmpty() &&
+            (previousMe.isInSafeZone != me.isInSafeZone || previousMe.safeZoneName != me.safeZoneName)) {
+            viewModelScope.launch {
+                firebaseSync.patchPlayer(session.joinCode, me.id, mapOf(
+                    "isInSafeZone" to me.isInSafeZone,
+                    "safeZoneName" to (me.safeZoneName ?: "")
+                ))
+            }
         }
         recalculateDistancesAndProximity()
     }
@@ -476,7 +486,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
             val protected = hiders.firstOrNull { it.isInSafeZone }
             _uiState.update {
-                it.copy(nearbyCatchableHider = catchable, safeZoneNotice = protected?.let { h -> "${h.name} is protected in ${h.safeZoneName ?: "Safe Zone"}!" })
+                it.copy(nearbyCatchableHider = catchable, safeZoneNotice = protected?.let { h -> "${h.name} is protected in ${h.safeZoneName?.takeIf { it.isNotBlank() } ?: "Safe Zone"}!" })
             }
         }
     }
