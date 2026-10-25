@@ -83,6 +83,7 @@ class FirebaseSyncService private constructor() {
         }
 
         val client = OkHttpClient.Builder()
+            .addInterceptor(AuthTokenInterceptor())
             .addInterceptor(logging)
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
