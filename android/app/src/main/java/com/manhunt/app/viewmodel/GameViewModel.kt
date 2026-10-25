@@ -268,21 +268,70 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startJailbreakHold() {
         val me = _uiState.value.myPlayer
-        val s = _uiState.value.session ?: return
-        if (!s.jailEnabled || me.role != Role.HIDER || me.isCaught || me.isInJail) return
-        if (GeoUtils.distanceMeters(me.latitude, me.longitude, s.jailLat, s.jailLng) > s.jailRadiusMeters) {
-            _uiState.update { it.copy(toastMessage = "Enter jail zone") }; return
+        val session = _uiState.value.session ?: return
+        if (!session.jailEnabled || session.status != GameStatus.RUNNING || session.isPaused ||
+            me.role != Role.HIDER || me.isCaught || me.isInJail) return
+        if (_uiState.value.players.none { it.role == Role.HIDER && it.isInJail }) {
+            _uiState.update { it.copy(toastMessage = "No Hiders are in jail") }
+            return
         }
-        jailbreakJob?.cancel()
+        if (GeoUtils.distanceMeters(me.latitude, me.longitude, session.jailLat, session.jailLng) > session.jailRadiusMeters) {
+            _uiState.update { it.copy(toastMessage = "Enter jail zone") }
+            return
+        }
+
+        // Any free Hider can request a jailbreak through their own player record. The host alone
+        // advances shared session progress and releases jailed players, matching the database rules.
+        val requestedAt = System.currentTimeMillis()
+        viewModelScope.launch {
+            val success = firebaseSync.patchPlayer(
+                session.joinCode,
+                me.id,
+                mapOf("jailbreakHoldStartedAtEpochMs" to requestedAt)
+            )
+            _uiState.update {
+                it.copy(
+                    jailbreakHoldProgress = 0,
+                    toastMessage = if (success) "Hold position to start jailbreak" else "Jailbreak request could not sync"
+                )
+            }
+        }
+    }
+
+    private fun startHostJailbreak(requesterId: String, requestedAt: Long) {
+        if (!_uiState.value.isOrganizer || jailbreakJob?.isActive == true) return
+        val initial = _uiState.value
+        val session = initial.session ?: return
+        val requester = initial.players.firstOrNull { it.id == requesterId } ?: return
+        val hasPrisoners = initial.players.any { it.role == Role.HIDER && it.isInJail }
+        val inJailZone = GeoUtils.distanceMeters(requester.latitude, requester.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters
+        if (session.status != GameStatus.RUNNING || session.isPaused || !session.jailEnabled ||
+            requester.role != Role.HIDER || requester.isCaught || requester.isInJail ||
+            requester.jailbreakHoldStartedAtEpochMs != requestedAt || !hasPrisoners || !inJailZone) {
+            viewModelScope.launch {
+                firebaseSync.patchPlayer(session.joinCode, requesterId, mapOf("jailbreakHoldStartedAtEpochMs" to 0L))
+            }
+            return
+        }
+
         jailbreakJob = viewModelScope.launch {
-            firebaseSync.updateSession(s.joinCode, mapOf("isJailbreakInProgress" to true, "jailbreakProgressSeconds" to 0))
+            firebaseSync.updateSession(session.joinCode, mapOf("isJailbreakInProgress" to true, "jailbreakProgressSeconds" to 0))
             for (progress in 1..Constants.JAILBREAK_HOLD_SECONDS) {
                 delay(1000)
-                val current = _uiState.value.session ?: return@launch
-                val pos = _uiState.value.myPlayer
-                val outsideJail = GeoUtils.distanceMeters(pos.latitude, pos.longitude, current.jailLat, current.jailLng) > current.jailRadiusMeters
-                if (current.status != GameStatus.RUNNING || current.isPaused || outsideJail || pos.isCaught || pos.isInJail) {
+                val state = _uiState.value
+                val current = state.session ?: return@launch
+                val player = state.players.firstOrNull { it.id == requesterId }
+                val stillInZone = player != null &&
+                    GeoUtils.distanceMeters(player.latitude, player.longitude, current.jailLat, current.jailLng) <= current.jailRadiusMeters
+                val valid = current.status == GameStatus.RUNNING && !current.isPaused && player != null &&
+                    player.jailbreakHoldStartedAtEpochMs == requestedAt && player.role == Role.HIDER &&
+                    !player.isCaught && !player.isInJail && stillInZone &&
+                    state.players.any { it.role == Role.HIDER && it.isInJail }
+                if (!valid) {
                     resetJailbreak(current.joinCode)
+                    player?.let {
+                        firebaseSync.patchPlayer(current.joinCode, requesterId, mapOf("jailbreakHoldStartedAtEpochMs" to 0L))
+                    }
                     _uiState.update { it.copy(toastMessage = "Jailbreak interrupted") }
                     return@launch
                 }
@@ -290,7 +339,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     firebaseSync.updateSession(current.joinCode, mapOf("jailbreakProgressSeconds" to progress))
                 }
             }
-            completeJailbreak()
+
+            val requesterStillHolding = _uiState.value.players.any {
+                it.id == requesterId && it.jailbreakHoldStartedAtEpochMs == requestedAt
+            }
+            if (requesterStillHolding) {
+                firebaseSync.patchPlayer(session.joinCode, requesterId, mapOf("jailbreakHoldStartedAtEpochMs" to 0L))
+                completeJailbreak()
+            }
         }
     }
 
@@ -318,6 +374,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val s = _uiState.value.session ?: return
         if (s.status != GameStatus.RUNNING) return
         val immunity = System.currentTimeMillis() + Constants.POST_JAILBREAK_IMMUNITY_SECONDS * 1000L
+        if (!_uiState.value.isOrganizer) return
         viewModelScope.launch {
             _uiState.value.players.filter { it.role == Role.HIDER && it.isInJail }.forEach { p ->
                 firebaseSync.joinPlayer(s.joinCode, p.copy(isCaught = false, isInJail = false, immunityUntilEpochMs = immunity))
@@ -408,6 +465,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (state.isOrganizer && attempt != null && attempt.timestamp > lastHandledCatchAttemptTimestamp) {
             lastHandledCatchAttemptTimestamp = attempt.timestamp
             processCatchAttempt(attempt)
+        }
+        if (state.isOrganizer && jailbreakJob?.isActive != true) {
+            room.players.values.firstOrNull {
+                it.role == Role.HIDER && !it.isCaught && !it.isInJail && it.jailbreakHoldStartedAtEpochMs > 0L
+            }?.let { requester ->
+                startHostJailbreak(requester.id, requester.jailbreakHoldStartedAtEpochMs)
+            }
         }
     }
 

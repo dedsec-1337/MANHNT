@@ -89,6 +89,19 @@ test("an authenticated player can create and update only their own player record
   await assertFails(set(ref(ownDb, `${roomPath}/players/hider-uid`), player("hider-uid", "SEEKER")));
 });
 
+test("a Hider can request a jailbreak only through their own player record", async () => {
+  await seedRoom();
+  const hiderDb = testEnv.authenticatedContext("hider-uid").database();
+  await assertSucceeds(update(ref(hiderDb, `${roomPath}/players/hider-uid`), {
+    jailbreakHoldStartedAtEpochMs: Date.now()
+  }));
+
+  const seekerDb = testEnv.authenticatedContext("seeker-uid").database();
+  await assertFails(update(ref(seekerDb, `${roomPath}/players/hider-uid`), {
+    jailbreakHoldStartedAtEpochMs: Date.now()
+  }));
+});
+
 test("the host can update another player's role and the session", async () => {
   await seedRoom();
   const db = testEnv.authenticatedContext("host-uid").database();
