@@ -1,9 +1,11 @@
 package com.manhunt.app.service
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.net.Uri
@@ -13,6 +15,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
 import com.manhunt.app.MainActivity
 import com.manhunt.app.R
@@ -36,6 +39,9 @@ class ManhuntLocationService : Service() {
     private var zoneRadiusMeters = 500.0
     private var joinCode = ""
     private var playerId = ""
+    private var isPaused = false
+    private var locationTrackingStarted = false
+    private var countdownTimerJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -52,19 +58,32 @@ class ManhuntLocationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        if (action == ACTION_STOP) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+        if (intent == null) {
+            stopSelf(startId)
             return START_NOT_STICKY
         }
+        when (intent.action) {
+            ACTION_STOP -> {
+                countdownTimerJob?.cancel()
+                stopLocationTracking()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
+            ACTION_START -> Unit
+            else -> {
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
+        }
 
-        remainingSeconds = intent?.getIntExtra(EXTRA_REMAINING_SECONDS, 1800) ?: 1800
-        zoneCenterLat = intent?.getDoubleExtra(EXTRA_ZONE_LAT, 0.0) ?: 0.0
-        zoneCenterLng = intent?.getDoubleExtra(EXTRA_ZONE_LNG, 0.0) ?: 0.0
-        zoneRadiusMeters = intent?.getDoubleExtra(EXTRA_ZONE_RADIUS, 500.0) ?: 500.0
-        joinCode = intent?.getStringExtra(EXTRA_JOIN_CODE) ?: ""
-        playerId = intent?.getStringExtra(EXTRA_PLAYER_ID) ?: ""
+        remainingSeconds = intent.getIntExtra(EXTRA_REMAINING_SECONDS, 1800)
+        zoneCenterLat = intent.getDoubleExtra(EXTRA_ZONE_LAT, 0.0)
+        zoneCenterLng = intent.getDoubleExtra(EXTRA_ZONE_LNG, 0.0)
+        zoneRadiusMeters = intent.getDoubleExtra(EXTRA_ZONE_RADIUS, 500.0)
+        joinCode = intent.getStringExtra(EXTRA_JOIN_CODE).orEmpty()
+        playerId = intent.getStringExtra(EXTRA_PLAYER_ID).orEmpty()
+        isPaused = intent.getBooleanExtra(EXTRA_IS_PAUSED, false)
 
         val notification = buildOngoingNotification(remainingSeconds)
 
@@ -81,11 +100,20 @@ class ManhuntLocationService : Service() {
         startLocationTracking()
         startCountdownTimer()
 
-        return START_STICKY
+        return START_REDELIVER_INTENT
     }
 
     @SuppressLint("MissingPermission")
     private fun startLocationTracking() {
+        if (locationTrackingStarted) return
+        val hasLocationPermission =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!hasLocationPermission) {
+            updateNotification("Location permission is required for player tracking.")
+            return
+        }
+
         val request = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             Constants.LOCATION_UPDATE_INTERVAL_MS
@@ -99,6 +127,13 @@ class ManhuntLocationService : Service() {
             locationCallback,
             Looper.getMainLooper()
         )
+        locationTrackingStarted = true
+    }
+
+    private fun stopLocationTracking() {
+        if (!locationTrackingStarted) return
+        fusedLocationClient.removeLocationUpdates(locationCallback)
+        locationTrackingStarted = false
     }
 
     private fun handleNewLocation(location: Location) {
@@ -136,10 +171,15 @@ class ManhuntLocationService : Service() {
     }
 
     private fun startCountdownTimer() {
-        serviceScope.launch {
-            while (isActive && remainingSeconds > 0) {
+        countdownTimerJob?.cancel()
+        countdownTimerJob = null
+        if (isPaused || remainingSeconds <= 0) return
+
+        countdownTimerJob = serviceScope.launch {
+            while (isActive && !isPaused && remainingSeconds > 0) {
                 delay(1000)
-                remainingSeconds--
+                if (isPaused) break
+                remainingSeconds = (remainingSeconds - 1).coerceAtLeast(0)
                 val notif = buildOngoingNotification(remainingSeconds)
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.notify(NOTIFICATION_ID, notif)
@@ -207,7 +247,8 @@ class ManhuntLocationService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        fusedLocationClient.removeLocationUpdates(locationCallback)
+        countdownTimerJob?.cancel()
+        stopLocationTracking()
         serviceScope.cancel()
     }
 
@@ -226,6 +267,7 @@ class ManhuntLocationService : Service() {
         const val EXTRA_ZONE_RADIUS = "EXTRA_ZONE_RADIUS"
         const val EXTRA_JOIN_CODE = "EXTRA_JOIN_CODE"
         const val EXTRA_PLAYER_ID = "EXTRA_PLAYER_ID"
+        const val EXTRA_IS_PAUSED = "EXTRA_IS_PAUSED"
 
         private val _locationUpdates = MutableSharedFlow<Location>(extraBufferCapacity = 32)
         val locationUpdates = _locationUpdates.asSharedFlow()
