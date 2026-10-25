@@ -7,6 +7,15 @@ object GeoUtils {
     private const val EARTH_RADIUS_METERS = 6371000.0
 
     /**
+     * Returns whether a GPS coordinate is present and within geographic bounds.
+     * (0, 0) remains the app's existing "no location yet" sentinel.
+     */
+    fun hasValidCoordinates(latitude: Double, longitude: Double): Boolean =
+        latitude.isFinite() && longitude.isFinite() &&
+            latitude in -90.0..90.0 && longitude in -180.0..180.0 &&
+            (latitude != 0.0 || longitude != 0.0)
+
+    /**
      * Calculates distance in meters between two lat/lng coordinates using the Haversine formula.
      */
     fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

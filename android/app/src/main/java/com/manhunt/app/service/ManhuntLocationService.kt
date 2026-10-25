@@ -102,7 +102,7 @@ class ManhuntLocationService : Service() {
     }
 
     private fun handleNewLocation(location: Location) {
-        val outOfBounds = if (zoneRadiusMeters > 0 && zoneCenterLat != 0.0) {
+        val outOfBounds = if (zoneRadiusMeters > 0 && GeoUtils.hasValidCoordinates(zoneCenterLat, zoneCenterLng)) {
             GeoUtils.isOutsideZone(
                 location.latitude,
                 location.longitude,

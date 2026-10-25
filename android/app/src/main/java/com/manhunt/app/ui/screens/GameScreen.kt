@@ -64,6 +64,9 @@ fun GameScreen(
             safeZones = session.safeZones,
             isAutoPingActive = state.isAutoPingActive,
             otherPlayers = state.players.filter { it.id != state.myPlayer.id },
+            headingDegrees = state.headingDegrees,
+            hasHeading = state.hasCompassHeading,
+            playerLocationUpdatedAtEpochMs = state.myPlayer.lastUpdatedEpochMs,
             modifier = Modifier.fillMaxSize()
         )
 
@@ -422,7 +425,8 @@ fun GameScreen(
                 CompassStrip(
                     deviceHeading = state.headingDegrees,
                     targetBearing = state.nearestSeekerBearing,
-                    distanceMeters = state.nearestSeekerDistance
+                    distanceMeters = state.nearestSeekerDistance,
+                    hasHeading = state.hasCompassHeading
                 )
 
                 // Hider's Personal Catch Code Card

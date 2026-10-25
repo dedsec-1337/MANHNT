@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.manhunt.app.data.model.NetworkSyncStatus
 import com.manhunt.app.data.model.Role
 import com.manhunt.app.ui.components.AppleCard
+import com.manhunt.app.ui.components.OSMMapView
 import com.manhunt.app.ui.components.ApplePrimaryButton
 import com.manhunt.app.ui.components.AppleSecondaryButton
 import com.manhunt.app.ui.components.RoleBadge
@@ -172,6 +173,52 @@ fun LobbyScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            item {
+                AppleCard {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Map Preview",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AppleTextPrimary
+                        )
+                        Text(
+                            text = "The play area is shown here. Live player positions appear when the game starts.",
+                            fontSize = 12.sp,
+                            color = AppleTextSecondary,
+                            lineHeight = 17.sp
+                        )
+                        OSMMapView(
+                            playerLat = state.myPlayer.latitude,
+                            playerLng = state.myPlayer.longitude,
+                            userRole = state.myPlayer.role,
+                            zoneCenterLat = session.zoneCenterLat,
+                            zoneCenterLng = session.zoneCenterLng,
+                            zoneRadiusMeters = session.zoneRadiusMeters,
+                            isUnlimitedZone = session.isUnlimitedZone,
+                            safeZones = session.safeZones,
+                            otherPlayers = emptyList(),
+                            headingDegrees = state.headingDegrees,
+                            hasHeading = state.hasCompassHeading,
+                            centerOnPlayer = false,
+                            showOtherPlayerLocations = false,
+                            initialZoom = when {
+                                session.isUnlimitedZone -> 13.0
+                                session.zoneRadiusMeters >= 2000.0 -> 13.0
+                                else -> 14.0
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(230.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
                     }
                 }
             }
