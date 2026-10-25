@@ -182,7 +182,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                             onComplete(false)
                             return@launch
                         }
-                        val syncedMe = room.players[me.id] ?: me
+                        val syncedMe = room.players[me.id]?.let { serverPlayer ->
+                            serverPlayer.copy(
+                                latitude = serverPlayer.latitude.takeIf { it != 0.0 } ?: authenticatedPlayer.latitude,
+                                longitude = serverPlayer.longitude.takeIf { it != 0.0 } ?: authenticatedPlayer.longitude,
+                                isOutOfZone = serverPlayer.isOutOfZone || authenticatedPlayer.isOutOfZone,
+                                lastUpdatedEpochMs = maxOf(serverPlayer.lastUpdatedEpochMs, authenticatedPlayer.lastUpdatedEpochMs)
+                            )
+                        } ?: me
                         if (syncedMe.latitude != 0.0 || syncedMe.longitude != 0.0) {
                             firebaseSync.updateLocation(upper, me.id, syncedMe.latitude, syncedMe.longitude, syncedMe.isOutOfZone)
                         }
