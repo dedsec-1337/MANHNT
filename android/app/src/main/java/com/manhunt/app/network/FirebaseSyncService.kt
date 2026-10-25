@@ -23,10 +23,20 @@ interface FirebaseRestApi {
         @Body roomData: RoomNetworkModel
     ): Response<Void>
 
-    @GET("rooms/{joinCode}.json")
-    suspend fun getRoom(
+    @GET("rooms/{joinCode}/publicPlayers.json")
+    suspend fun getPlayers(
         @Path("joinCode") joinCode: String
-    ): Response<RoomNetworkModel?>
+    ): Response<Map<String, Player>?>
+
+    @GET("rooms/{joinCode}/lastCatchAttempt.json")
+    suspend fun getLastCatchAttempt(
+        @Path("joinCode") joinCode: String
+    ): Response<CatchAttemptPayload?>
+
+    @GET("rooms/{joinCode}/pendingCatchConfirm.json")
+    suspend fun getPendingCatchConfirm(
+        @Path("joinCode") joinCode: String
+    ): Response<CatchConfirmPayload?>
 
     @GET("rooms/{joinCode}/session.json")
     suspend fun getSession(
@@ -62,14 +72,14 @@ interface FirebaseRestApi {
         @Path("playerId") playerId: String,
         @Body catchCode: String
     ): Response<Void>
-    @PUT("rooms/{joinCode}/players/{playerId}.json")
+    @PUT("rooms/{joinCode}/publicPlayers/{playerId}.json")
     suspend fun putPlayer(
         @Path("joinCode") joinCode: String,
         @Path("playerId") playerId: String,
         @Body player: Player
     ): Response<Void>
 
-    @PATCH("rooms/{joinCode}/players/{playerId}.json")
+    @PATCH("rooms/{joinCode}/publicPlayers/{playerId}.json")
     suspend fun patchPlayerLocation(
         @Path("joinCode") joinCode: String,
         @Path("playerId") playerId: String,
@@ -88,7 +98,7 @@ interface FirebaseRestApi {
         @Body catchAttempt: CatchAttemptPayload
     ): Response<Void>
 
-    @DELETE("rooms/{joinCode}/players/{playerId}.json")
+    @DELETE("rooms/{joinCode}/publicPlayers/{playerId}.json")
     suspend fun deletePlayer(
         @Path("joinCode") joinCode: String,
         @Path("playerId") playerId: String
@@ -186,13 +196,20 @@ class FirebaseSyncService private constructor() {
     suspend fun fetchRoomData(joinCode: String): RoomNetworkModel? {
         return try {
             _syncStatus.value = NetworkSyncStatus.SYNCING
-            val response = api.getRoom(joinCode)
-            if (!response.isSuccessful) {
-                Log.w(TAG, "Get room response code: ${response.code()}")
+            val sessionResponse = api.getSession(joinCode)
+            if (!sessionResponse.isSuccessful) {
+                Log.w(TAG, "Get room session response code: ${sessionResponse.code()}")
                 _syncStatus.value = NetworkSyncStatus.OFFLINE
                 return null
             }
-            val data = response.body() ?: return null
+            val session = sessionResponse.body() ?: return null
+            val playersResponse = api.getPlayers(joinCode)
+            if (!playersResponse.isSuccessful) {
+                Log.w(TAG, "Get public players response code: ${playersResponse.code()}")
+                _syncStatus.value = NetworkSyncStatus.OFFLINE
+                return null
+            }
+            val publicPlayers = playersResponse.body().orEmpty()
             val locationResponse = api.getLocations(joinCode)
             if (!locationResponse.isSuccessful) {
                 Log.w(TAG, "Get private locations response code: ${locationResponse.code()}")
@@ -201,7 +218,7 @@ class FirebaseSyncService private constructor() {
             }
             val locations = locationResponse.body().orEmpty()
             val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-            val catchCodes = if (uid == data.session.hostPlayerId) {
+            val catchCodes = if (uid == session.hostPlayerId) {
                 val codesResponse = api.getCatchCodes(joinCode)
                 if (codesResponse.isSuccessful) codesResponse.body().orEmpty() else {
                     Log.w(TAG, "Get host catch codes response code: ${codesResponse.code()}")
@@ -211,7 +228,9 @@ class FirebaseSyncService private constructor() {
                 val codeResponse = api.getCatchCode(joinCode, uid)
                 if (codeResponse.isSuccessful) mapOf(uid to (codeResponse.body() ?: "")) else emptyMap()
             }
-            val mergedPlayers = data.players.mapValues { (playerId, player) ->
+            val lastCatchResponse = api.getLastCatchAttempt(joinCode)
+            val pendingResponse = api.getPendingCatchConfirm(joinCode)
+            val mergedPlayers = publicPlayers.mapValues { (playerId, player) ->
                 val location = locations[playerId]
                 player.copy(
                     catchCode = catchCodes[playerId] ?: "",
@@ -221,7 +240,12 @@ class FirebaseSyncService private constructor() {
                     lastUpdatedEpochMs = location?.lastUpdatedEpochMs ?: 0L
                 )
             }
-            val merged = data.copy(players = mergedPlayers)
+            val merged = RoomNetworkModel(
+                session = session,
+                players = mergedPlayers,
+                lastCatchAttempt = if (lastCatchResponse.isSuccessful) lastCatchResponse.body() else null,
+                pendingCatchConfirm = if (pendingResponse.isSuccessful) pendingResponse.body() else null
+            )
             _syncStatus.value = NetworkSyncStatus.ONLINE
             _roomState.value = merged
             merged
