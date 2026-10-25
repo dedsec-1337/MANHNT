@@ -681,7 +681,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (pending.status == "REJECTED" && target.disputesRemaining > 0) {
-                firebaseSync.joinPlayer(session.joinCode, target.copy(disputesRemaining = target.disputesRemaining - 1))
+                val updated = firebaseSync.joinPlayer(
+                    session.joinCode,
+                    target.copy(disputesRemaining = target.disputesRemaining - 1)
+                )
+                if (!updated) {
+                    lastHandledCatchConfirmCreatedAt = 0L
+                    return@launch
+                }
                 firebaseSync.clearPendingCatchConfirm(session.joinCode)
                 _uiState.update { it.copy(toastMessage = "Catch disputed") }
                 return@launch
@@ -689,13 +696,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             val sendToJail = session.jailEnabled && session.jailLat != 0.0
             val caught = target.copy(isCaught = true, isInJail = sendToJail, isStealthActive = false)
-            if (firebaseSync.joinPlayer(session.joinCode, caught)) {
-                _uiState.update { current ->
-                    current.copy(players = current.players.map { player -> if (player.id == target.id) caught else player })
-                }
-                val remainingHiders = _uiState.value.players.filter { it.role == Role.HIDER && it.id != target.id && !it.isCaught }
-                if (remainingHiders.isEmpty()) endGame(Role.SEEKER)
+            val updated = firebaseSync.joinPlayer(session.joinCode, caught)
+            if (!updated) {
+                lastHandledCatchConfirmCreatedAt = 0L
+                return@launch
             }
+            _uiState.update { current ->
+                current.copy(players = current.players.map { player -> if (player.id == target.id) caught else player })
+            }
+            val remainingHiders = _uiState.value.players.filter { it.role == Role.HIDER && it.id != target.id && !it.isCaught }
+            if (remainingHiders.isEmpty()) endGame(Role.SEEKER)
             firebaseSync.clearPendingCatchConfirm(session.joinCode)
         }
     }
