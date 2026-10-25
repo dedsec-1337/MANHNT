@@ -172,11 +172,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val authenticatedPlayer = ensureFirebasePlayerIdentity()
-                val room = firebaseSync.fetchRoomData(upper)
-                if (room != null) {
-                    val me = authenticatedPlayer.copy(role = Role.SEEKER, catchCode = "")
-                    if (firebaseSync.joinPlayer(upper, me)) {
-                        _uiState.update { it.copy(session = room.session, players = room.players.values.toList(), myPlayer = me, isOrganizer = room.session.hostPlayerId == me.id, isJoiningRoom = false, currentDynamicRadiusMeters = room.session.currentDynamicZoneRadiusMeters, toastMessage = "Joined ${room.session.roomName}!" ) }
+                val session = firebaseSync.fetchRoomSession(upper)
+                if (session != null) {
+                    val existingRoom = firebaseSync.fetchRoomData(upper)
+                    val existingPlayer = existingRoom?.players?.get(authenticatedPlayer.id)
+                    val me = existingPlayer?.copy(
+                        name = authenticatedPlayer.name,
+                        avatarEmoji = authenticatedPlayer.avatarEmoji
+                    ) ?: authenticatedPlayer.copy(role = Role.SEEKER, catchCode = "")
+                    val joined = if (existingPlayer != null) {
+                        firebaseSync.joinPlayer(upper, me)
+                    } else {
+                        firebaseSync.joinPlayer(upper, me)
+                    }
+                    if (joined) {
+                        val room = firebaseSync.fetchRoomData(upper)
+                        if (room == null) {
+                            _uiState.update { it.copy(isJoiningRoom = false, toastMessage = "Joined, but room data could not be loaded. Check Firebase rules.") }
+                            onComplete(false)
+                            return@launch
+                        }
+                        val syncedMe = room.players[me.id]?.let { serverPlayer ->
+                            serverPlayer.copy(
+                                latitude = serverPlayer.latitude.takeIf { it != 0.0 } ?: authenticatedPlayer.latitude,
+                                longitude = serverPlayer.longitude.takeIf { it != 0.0 } ?: authenticatedPlayer.longitude,
+                                isOutOfZone = serverPlayer.isOutOfZone || authenticatedPlayer.isOutOfZone,
+                                lastUpdatedEpochMs = maxOf(serverPlayer.lastUpdatedEpochMs, authenticatedPlayer.lastUpdatedEpochMs)
+                            )
+                        } ?: me
+                        if (syncedMe.latitude != 0.0 || syncedMe.longitude != 0.0) {
+                            firebaseSync.updateLocation(upper, me.id, syncedMe.latitude, syncedMe.longitude, syncedMe.isOutOfZone)
+                        }
+                        _uiState.update { it.copy(session = room.session, players = room.players.values.toList(), myPlayer = syncedMe, isOrganizer = room.session.hostPlayerId == me.id, isJoiningRoom = false, currentDynamicRadiusMeters = room.session.currentDynamicZoneRadiusMeters, toastMessage = "Joined ${room.session.roomName}!" ) }
                         onComplete(true)
                     } else {
                         _uiState.update { it.copy(isJoiningRoom = false, toastMessage = "Couldn't join room. Check your connection and Firebase database rules.") }
@@ -196,8 +223,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun togglePlayerRole(playerId: String) {
         if (!_uiState.value.isOrganizer) return
         val p = _uiState.value.players.find { it.id == playerId } ?: return
+        val code = _uiState.value.session?.joinCode ?: return
         val next = if (p.role == Role.SEEKER) Role.HIDER else Role.SEEKER
-        viewModelScope.launch { firebaseSync.joinPlayer(_uiState.value.session?.joinCode ?: return@launch, p.copy(role = next, catchCode = if (next == Role.HIDER) RandomCode.generateNumericCode(4) else "")) }
+        val nextCatchCode = if (next == Role.HIDER) RandomCode.generateNumericCode(4) else ""
+        viewModelScope.launch {
+            if (!firebaseSync.setCatchCode(code, p.id, nextCatchCode)) {
+                _uiState.update { it.copy(toastMessage = "Could not update private catch code") }
+                return@launch
+            }
+            if (!firebaseSync.joinPlayer(code, p.copy(role = next, catchCode = nextCatchCode))) {
+                firebaseSync.setCatchCode(code, p.id, p.catchCode)
+                _uiState.update { it.copy(toastMessage = "Could not update player role") }
+            }
+        }
     }
 
     fun autoAssignRoles(ratio: Int = 3) {
@@ -208,7 +246,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             shuffled.forEachIndexed { i, p ->
                 val hider = i < hiders
-                firebaseSync.joinPlayer(code, p.copy(role = if (hider) Role.HIDER else Role.SEEKER, catchCode = if (hider) RandomCode.generateNumericCode(4) else ""))
+                val role = if (hider) Role.HIDER else Role.SEEKER
+                val catchCode = if (hider) RandomCode.generateNumericCode(4) else ""
+                val codeUpdated = firebaseSync.setCatchCode(code, p.id, catchCode)
+                if (codeUpdated) {
+                    firebaseSync.joinPlayer(code, p.copy(role = role, catchCode = catchCode))
+                } else {
+                    _uiState.update { it.copy(toastMessage = "Could not update private catch codes. Check Firebase rules.") }
+                }
             }
         }
     }
@@ -243,14 +288,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (s.status != GameStatus.RUNNING || s.isPaused || (s.headStartRemainingSeconds > 0 && me.role == Role.SEEKER)) { onResult(false, "Catch unavailable right now"); return }
         val dist = GeoUtils.distanceMeters(me.latitude, me.longitude, target.latitude, target.longitude)
         if (dist > Constants.CATCH_PROXIMITY_METERS) { onResult(false, "Too far ${dist.toInt()}m"); return }
+        if (!enteredCode.trim().matches(Regex("^[0-9]{4}$"))) {
+            onResult(false, "Enter the four-digit catch code")
+            return
+        }
         viewModelScope.launch {
             val submitted = firebaseSync.sendCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim()))
-            if (!submitted) _uiState.update { it.copy(toastMessage = "Catch attempt could not sync. Check your connection.") }
+            if (submitted) {
+                hapticManager.triggerCatchConfirmation()
+                onResult(true, "Catch submitted for confirmation")
+            } else {
+                _uiState.update { it.copy(toastMessage = "Catch attempt could not sync. Check the code, connection, and room rules.") }
+                onResult(false, "Catch attempt rejected")
+            }
         }
-        if (target.catchCode.trim() == enteredCode.trim()) {
-            hapticManager.triggerCatchConfirmation()
-            onResult(true, "Catch submitted for confirmation")
-        } else onResult(false, "Wrong code")
     }
 
     fun activateStealth() {
