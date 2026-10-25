@@ -80,6 +80,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var jailbreakJob: Job? = null
     private var lastHandledCatchAttemptTimestamp: Long = 0L
     private var lastHandledCatchConfirmCreatedAt: Long = 0L
+    private val handledStealthRequests = mutableMapOf<String, Long>()
+    private val handledStealthExpiries = mutableMapOf<String, Long>()
 
     init {
         viewModelScope.launch {
@@ -254,16 +256,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun activateStealth() {
         val me = _uiState.value.myPlayer
         val s = _uiState.value.session ?: return
-        if (me.role != Role.HIDER || me.isCaught || me.isInJail) return
+        if (me.role != Role.HIDER || me.isCaught || me.isInJail || me.isStealthActive) return
         val now = System.currentTimeMillis()
-        if (me.stealthCooldownUntilEpochMs > now) { _uiState.update { it.copy(toastMessage = "Cooldown") }; return }
+        if (me.stealthCooldownUntilEpochMs > now) {
+            _uiState.update { it.copy(toastMessage = "Cooldown") }
+            return
+        }
         viewModelScope.launch {
-            val until = now + Constants.STEALTH_DURATION_SECONDS * 1000L
-            val cooldownUntil = until + Constants.STEALTH_COOLDOWN_SECONDS * 1000L
-            val updated = me.copy(isStealthActive = true, stealthUntilEpochMs = until, stealthCooldownUntilEpochMs = cooldownUntil)
-            firebaseSync.patchPlayer(s.joinCode, me.id, mapOf("isStealthActive" to true, "stealthUntilEpochMs" to until, "stealthCooldownUntilEpochMs" to cooldownUntil))
-            hapticManager.triggerPowerUp()
-            _uiState.update { it.copy(myPlayer = updated, isStealthActive = true, toastMessage = "Stealth ${Constants.STEALTH_DURATION_SECONDS}s") }
+            val requested = firebaseSync.patchPlayer(
+                s.joinCode,
+                me.id,
+                mapOf("stealthActivationRequestedAtEpochMs" to now)
+            )
+            _uiState.update {
+                it.copy(toastMessage = if (requested) "Stealth activation requested" else "Stealth request could not sync")
+            }
         }
     }
 
@@ -362,9 +369,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val active = me.isStealthActive && now < me.stealthUntilEpochMs
         val cooldown = (((me.stealthCooldownUntilEpochMs - now).coerceAtLeast(0L) + 999L) / 1000L).toInt()
         if (me.isStealthActive && !active) {
-            val updated = me.copy(isStealthActive = false)
-            _uiState.update { it.copy(myPlayer = updated) }
-            state.session?.let { s -> viewModelScope.launch { firebaseSync.patchPlayer(s.joinCode, me.id, mapOf("isStealthActive" to false)) } }
+            _uiState.update { it.copy(myPlayer = me.copy(isStealthActive = false)) }
         }
         if (active != state.isStealthActive || cooldown != state.stealthCooldownSeconds) {
             _uiState.update { it.copy(isStealthActive = active, stealthCooldownSeconds = cooldown) }
@@ -481,6 +486,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 viewModelScope.launch { firebaseSync.clearPendingCatchConfirm(session.joinCode) }
             }
         }
+        if (state.isOrganizer) {
+            room.players.values.filter { it.stealthActivationRequestedAtEpochMs > 0L }
+                .forEach { processStealthRequest(it) }
+            room.players.values.filter {
+                it.isStealthActive && it.stealthUntilEpochMs > 0L && now >= it.stealthUntilEpochMs
+            }.forEach { processExpiredStealth(it) }
+        }
         if (state.isOrganizer && jailbreakJob?.isActive != true) {
             room.players.values.firstOrNull {
                 it.role == Role.HIDER && !it.isCaught && !it.isInJail && it.jailbreakHoldStartedAtEpochMs > 0L
@@ -562,6 +574,58 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update {
                 it.copy(nearbyCatchableHider = catchable, safeZoneNotice = protected?.let { h -> "${h.name} is protected in ${h.safeZoneName?.takeIf { it.isNotBlank() } ?: "Safe Zone"}!" })
             }
+        }
+    }
+
+    private fun processStealthRequest(requester: Player) {
+        if (!_uiState.value.isOrganizer) return
+        val session = _uiState.value.session ?: return
+        val requestedAt = requester.stealthActivationRequestedAtEpochMs
+        if (requestedAt <= 0L || handledStealthRequests[requester.id] == requestedAt) return
+        handledStealthRequests[requester.id] = requestedAt
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val current = _uiState.value.players.firstOrNull { it.id == requester.id } ?: requester
+            val valid = requestedAt <= now + 5_000L && now - requestedAt <= 30_000L &&
+                current.role == Role.HIDER && !current.isCaught && !current.isInJail &&
+                current.stealthCooldownUntilEpochMs <= now
+            val success = if (valid) {
+                val until = now + Constants.STEALTH_DURATION_SECONDS * 1000L
+                val cooldownUntil = until + Constants.STEALTH_COOLDOWN_SECONDS * 1000L
+                firebaseSync.joinPlayer(
+                    session.joinCode,
+                    current.copy(
+                        isStealthActive = true,
+                        stealthUntilEpochMs = until,
+                        stealthCooldownUntilEpochMs = cooldownUntil,
+                        stealthActivationRequestedAtEpochMs = 0L
+                    )
+                )
+            } else {
+                firebaseSync.patchPlayer(
+                    session.joinCode,
+                    requester.id,
+                    mapOf("stealthActivationRequestedAtEpochMs" to 0L)
+                )
+            }
+            if (!success) handledStealthRequests.remove(requester.id)
+            else if (valid) hapticManager.triggerPowerUp()
+        }
+    }
+
+    private fun processExpiredStealth(player: Player) {
+        if (!_uiState.value.isOrganizer) return
+        val session = _uiState.value.session ?: return
+        val expiry = player.stealthUntilEpochMs
+        if (expiry <= 0L || handledStealthExpiries[player.id] == expiry) return
+        handledStealthExpiries[player.id] = expiry
+        viewModelScope.launch {
+            val success = firebaseSync.patchPlayer(
+                session.joinCode,
+                player.id,
+                mapOf("isStealthActive" to false)
+            )
+            if (!success) handledStealthExpiries.remove(player.id)
         }
     }
 
