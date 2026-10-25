@@ -280,8 +280,7 @@ class FirebaseSyncService private constructor() {
                     val joinInfo = RoomJoinInfo(
                         roomName = room.session.roomName,
                         joinCode = room.session.joinCode,
-                        hostPlayerId = room.session.hostPlayerId,
-                        status = room.session.status
+                        hostPlayerId = room.session.hostPlayerId
                     )
                     success = api.putJoinInfo(room.session.joinCode, joinInfo).isSuccessful
                 }
