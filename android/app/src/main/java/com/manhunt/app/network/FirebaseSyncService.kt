@@ -28,6 +28,25 @@ interface FirebaseRestApi {
         @Path("joinCode") joinCode: String
     ): Response<Map<String, Player>?>
 
+    @GET("rooms/{joinCode}/publicPlayers/{playerId}.json")
+    suspend fun getPlayer(
+        @Path("joinCode") joinCode: String,
+        @Path("playerId") playerId: String
+    ): Response<Player?>
+
+    @PUT("rooms/{joinCode}/catchAcks/{seekerId}.json")
+    suspend fun putCatchAck(
+        @Path("joinCode") joinCode: String,
+        @Path("seekerId") seekerId: String,
+        @Body ack: CatchAckPayload
+    ): Response<Void>
+
+    @GET("rooms/{joinCode}/catchAcks/{seekerId}.json")
+    suspend fun getCatchAck(
+        @Path("joinCode") joinCode: String,
+        @Path("seekerId") seekerId: String
+    ): Response<CatchAckPayload?>
+
     @GET("rooms/{joinCode}/lastCatchAttempt.json")
     suspend fun getLastCatchAttempt(
         @Path("joinCode") joinCode: String
@@ -262,6 +281,7 @@ class FirebaseSyncService private constructor() {
             }
             val lastCatchResponse = api.getLastCatchAttempt(joinCode)
             val pendingResponse = api.getPendingCatchConfirm(joinCode)
+            val catchAckResponse = if (uid.isNotEmpty()) api.getCatchAck(joinCode, uid) else null
             val signalsResponse = api.getGameSignals(joinCode)
             val nowEpochMs = System.currentTimeMillis()
             val activeSignals = if (signalsResponse.isSuccessful) {
@@ -288,7 +308,8 @@ class FirebaseSyncService private constructor() {
                 session = session,
                 players = mergedPlayers,
                 lastCatchAttempt = if (lastCatchResponse.isSuccessful) lastCatchResponse.body() else null,
-                pendingCatchConfirm = if (pendingResponse.isSuccessful) pendingResponse.body() else null
+                pendingCatchConfirm = if (pendingResponse.isSuccessful) pendingResponse.body() else null,
+                catchAck = if (catchAckResponse?.isSuccessful == true) catchAckResponse.body() else null
             )
             _syncStatus.value = NetworkSyncStatus.ONLINE
             _roomSignals.value = activeSignals
@@ -344,6 +365,12 @@ class FirebaseSyncService private constructor() {
      * Player joins room via PUT /rooms/{join_code}/players/{player_id}.json
      */
     suspend fun joinPlayer(joinCode: String, player: Player): Boolean {
+        // A HIDER without a 4-digit code can never be caught, so refuse the write entirely rather
+        // than persist a role that leaves the seeker unable to tag them.
+        if (player.role == Role.HIDER && !player.catchCode.matches(Regex("^[0-9]{4}$"))) {
+            Log.w(TAG, "Refusing to persist HIDER ${player.id} without a valid catch code")
+            return false
+        }
         return withContext(Dispatchers.IO) {
             try {
                 _syncStatus.value = NetworkSyncStatus.SYNCING
@@ -369,6 +396,47 @@ class FirebaseSyncService private constructor() {
                 api.putCatchCode(joinCode, playerId, catchCode).isSuccessful
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to set private catch code: ${e.message}")
+                false
+            }
+        }
+    }
+
+    /**
+     * Reads a single public player record. Used to recover a player's existing role before the
+     * join PUT, because the full room read is unavailable until membership exists.
+     */
+    suspend fun fetchPublicPlayer(joinCode: String, playerId: String): Player? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.getPlayer(joinCode, playerId)
+                if (response.isSuccessful) response.body() else null
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch public player: ${e.message}")
+                null
+            }
+        }
+    }
+
+    /** Reads a player's own private catch code (allowed by rules for self and for the host). */
+    suspend fun fetchCatchCode(joinCode: String, playerId: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = api.getCatchCode(joinCode, playerId)
+                if (response.isSuccessful) response.body() else null
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch catch code: ${e.message}")
+                null
+            }
+        }
+    }
+
+    /** Host-only: publishes the catch outcome to the seeker's own acknowledgement node. */
+    suspend fun publishCatchAck(joinCode: String, ack: CatchAckPayload): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                api.putCatchAck(joinCode, ack.seekerId, ack).isSuccessful
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to publish catch ack: ${e.message}")
                 false
             }
         }

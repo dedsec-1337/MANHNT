@@ -12,7 +12,10 @@ object Constants {
     const val GAME_SIGNAL_MAX_FUTURE_SKEW_MS = 5_000L
     const val GAME_SIGNAL_SEND_COOLDOWN_MS = 1_500L
 
-    const val CATCH_PROXIMITY_METERS = 10.0
+    // Catch range must absorb the write/poll cadence: locations are written every 5s and the
+    // room is polled every 2.5s, so two players standing together can appear up to ~7.5s stale.
+    // GPS jitter on top of that makes 10m unusable, so allow 25m.
+    const val CATCH_PROXIMITY_METERS = 25.0
 
     const val HEARTBEAT_FAR_METERS = 80.0
     const val HEARTBEAT_MID_METERS = 50.0

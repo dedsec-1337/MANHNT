@@ -73,7 +73,13 @@ class MainActivity : ComponentActivity() {
             val uiState by viewModel.uiState.collectAsState()
             var selectedTab by rememberSaveable { mutableStateOf(AppTab.HUNT) }
             var transientDestination by rememberSaveable { mutableStateOf<TransientDestination?>(null) }
-            var previousStatus by remember { mutableStateOf<GameStatus?>(null) }
+            // Persist as a name so it survives process death; a plain `remember` reset to null after
+            // recreation, which made the effect below treat a live match as "just ended" and stop
+            // the location service.
+            var previousStatusName by rememberSaveable { mutableStateOf<String?>(null) }
+            val previousStatus = previousStatusName?.let { name ->
+                runCatching { GameStatus.valueOf(name) }.getOrNull()
+            }
 
             ManhuntTheme(settings = uiState.appearanceSettings) {
                 Surface(
@@ -111,6 +117,12 @@ class MainActivity : ComponentActivity() {
 
                     LaunchedEffect(uiState.session?.status, hasLocationPermission) {
                         val currentStatus = uiState.session?.status
+                        // A saved transient destination can outlive the session it belonged to (for
+                        // example, process death restores RESULTS while no session exists). Results
+                        // renders nothing without a session, which showed as a black screen.
+                        if (uiState.session == null && transientDestination == TransientDestination.RESULTS) {
+                            transientDestination = null
+                        }
                         when (currentStatus) {
                             GameStatus.LOBBY -> {
                                 if (previousStatus == null) selectedTab = AppTab.CREW
@@ -147,7 +159,7 @@ class MainActivity : ComponentActivity() {
                                 stopLocationService()
                             }
                         }
-                        previousStatus = currentStatus
+                        previousStatusName = currentStatus?.name
                     }
 
                     LaunchedEffect(uiState.appearanceSettings.highRefreshRateEnabled) {
@@ -166,7 +178,15 @@ class MainActivity : ComponentActivity() {
 
                     val activeMatch = uiState.session?.status == GameStatus.RUNNING ||
                         uiState.session?.status == GameStatus.PAUSED
-                    val route = when (transientDestination) {
+                    // Defensive: never resolve to RESULTS (or an active-match shell) without a
+                    // session, because those screens return early and render an empty black surface.
+                    val resolvedTransientDestination = when {
+                        uiState.session == null -> null
+                        transientDestination == TransientDestination.RESULTS &&
+                            uiState.session?.status != GameStatus.FINISHED -> null
+                        else -> transientDestination
+                    }
+                    val route = when (resolvedTransientDestination) {
                         TransientDestination.CREATE_ROOM -> RootDestination.CREATE_ROOM
                         TransientDestination.RESULTS -> RootDestination.RESULTS
                         null -> when (selectedTab) {
@@ -184,7 +204,7 @@ class MainActivity : ComponentActivity() {
                         containerColor = MaterialTheme.colorScheme.background,
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         bottomBar = {
-                            if (transientDestination == null) {
+                            if (resolvedTransientDestination == null) {
                                 AppBottomBar(
                                     selectedTab = selectedTab,
                                     onSelectTab = { selectedTab = it }

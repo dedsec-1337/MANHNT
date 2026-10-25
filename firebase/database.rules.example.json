@@ -130,6 +130,19 @@
           },
           ".read": "auth != null && root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid"
         },
+        "catchAcks": {
+          "$seekerId": {
+            ".read": "auth != null && ($seekerId === auth.uid || root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid)",
+            ".write": "auth != null && root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid",
+            ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'accepted', 'timestamp']) && newData.child('seekerId').val() === $seekerId && newData.child('targetHiderId').isString() && newData.child('accepted').isBoolean() && newData.child('timestamp').isNumber() && newData.child('timestamp').val() >= 0",
+            "seekerId": { ".validate": "newData.isString() && newData.val() === $seekerId" },
+            "targetHiderId": { ".validate": "newData.isString()" },
+            "targetName": { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "accepted": { ".validate": "newData.isBoolean()" },
+            "timestamp": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "$other": { ".validate": false }
+          }
+        },
         "pendingCatchConfirm": {
           ".write": "auth != null && ((root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid) || (data.exists() && data.child('status').val() === 'PENDING' && data.child('targetHiderId').val() === auth.uid && newData.child('seekerId').val() === data.child('seekerId').val() && newData.child('targetHiderId').val() === data.child('targetHiderId').val() && newData.child('seekerName').val() === data.child('seekerName').val() && newData.child('distanceMeters').val() === data.child('distanceMeters').val() && newData.child('createdAtEpochMs').val() === data.child('createdAtEpochMs').val() && newData.child('expiresAtEpochMs').val() === data.child('expiresAtEpochMs').val() && (newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')))",
           ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'seekerName', 'distanceMeters', 'createdAtEpochMs', 'expiresAtEpochMs', 'status']) && newData.child('seekerId').isString() && newData.child('targetHiderId').isString() && newData.child('seekerId').val() !== newData.child('targetHiderId').val() && newData.child('seekerName').isString() && newData.child('distanceMeters').isNumber() && newData.child('distanceMeters').val() >= 0 && newData.child('createdAtEpochMs').isNumber() && newData.child('expiresAtEpochMs').isNumber() && (newData.child('status').val() === 'PENDING' || newData.child('status').val() === 'ACCEPTED' || newData.child('status').val() === 'REJECTED')",
@@ -164,7 +177,7 @@
         },
         "publicPlayers": {
           "$playerId": {
-            ".write": "auth != null && ((root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid) || ($playerId === auth.uid && !newData.exists()) || ($playerId === auth.uid && ((!data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === 'SEEKER') || (data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === data.child('role').val() && newData.child('isCaught').val() === data.child('isCaught').val() && newData.child('isInJail').val() === data.child('isInJail').val() && newData.child('immunityUntilEpochMs').val() === data.child('immunityUntilEpochMs').val() && newData.child('disputesRemaining').val() === data.child('disputesRemaining').val() && newData.child('isInSafeZone').val() === data.child('isInSafeZone').val() && newData.child('safeZoneName').val() === data.child('safeZoneName').val() && newData.child('isStealthActive').val() === data.child('isStealthActive').val() && newData.child('stealthUntilEpochMs').val() === data.child('stealthUntilEpochMs').val() && newData.child('stealthCooldownUntilEpochMs').val() === data.child('stealthCooldownUntilEpochMs').val()))))",
+            ".write": "auth != null && ((root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid) || ($playerId === auth.uid && !newData.exists()) || ($playerId === auth.uid && ((!data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === 'SEEKER') || (data.exists() && newData.child('id').val() === auth.uid && newData.child('role').val() === data.child('role').val() && newData.child('isCaught').val() === data.child('isCaught').val() && newData.child('isInJail').val() === data.child('isInJail').val() && newData.child('immunityUntilEpochMs').val() === data.child('immunityUntilEpochMs').val() && newData.child('disputesRemaining').val() === data.child('disputesRemaining').val() && newData.child('isStealthActive').val() === data.child('isStealthActive').val() && newData.child('stealthUntilEpochMs').val() === data.child('stealthUntilEpochMs').val() && newData.child('stealthCooldownUntilEpochMs').val() === data.child('stealthCooldownUntilEpochMs').val()))))",
             ".validate": "newData.hasChildren(['id', 'name', 'role']) && newData.child('id').val() === $playerId && (newData.child('role').val() === 'SEEKER' || newData.child('role').val() === 'HIDER')",
             "id": {
               ".validate": "newData.isString() && newData.val() === $playerId"

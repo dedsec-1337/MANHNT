@@ -109,15 +109,14 @@ fun GameScreen(
     val headStartTimerText = String.format("%02d:%02d", headStartMins, headStartSecs)
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (state.myPlayer.role == Role.SEEKER) {
-            GameMapLayer(
-                state = state,
-                headingFlow = headingFlow,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
-        }
+        // Both roles get the live map. OSMMapView already suppresses other players' markers for
+        // non-Seekers (and while Stealth is active), so a Hider sees only their own position and
+        // the zone geometry. Previously Hiders rendered an empty Box, which is pure black in OLED.
+        GameMapLayer(
+            state = state,
+            headingFlow = headingFlow,
+            modifier = Modifier.fillMaxSize()
+        )
 
         // 2. Top Header HUD Card & Notification Stack
         Column(
@@ -614,7 +613,7 @@ fun GameScreen(
                 }
             }
 
-            // B. If Seeker: Catch Button activates within 10 meters of a Hider!
+            // B. If Seeker: Catch Button activates within 25 meters of a Hider!
             if (state.myPlayer.role == Role.SEEKER) {
                 val catchable = state.nearbyCatchableHider
                 val isTargetInSafeZone = catchable?.isInSafeZone == true
@@ -622,7 +621,7 @@ fun GameScreen(
                 val buttonText = when {
                     state.isSeekerFrozen -> "Frozen: Waiting for Head Start"
                     isTargetInSafeZone -> "Target in Safe Zone (${catchable?.safeZoneName ?: "Base"})"
-                    catchable != null -> "⚡ Tag ${catchable.name} (Within 10m!)"
+                    catchable != null -> "⚡ Tag ${catchable.name} (Within 25m!)"
                     else -> "Catch Button (Too Far)"
                 }
 

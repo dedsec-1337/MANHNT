@@ -21,7 +21,7 @@
 
 - 🌐 **Long-Range Cellular Tracking**: Players can spread out across parks, neighborhoods, and miles. Coordinates sync via Firebase Realtime Database REST API using Retrofit 2 & OkHttp 3.
 - 🎯 **Asymmetric Role Mechanics**:
-  - **Seekers**: Track fleeing prey markers live on OpenStreetMap. When within **10 meters** of a target, the "Catch" button activates.
+  - **Seekers**: Track fleeing prey markers live on OpenStreetMap. When within **25 meters** of a target, the "Catch" button activates.
   - **Hiders**: Stealth map (own location only). An Apple-inspired **rotating Compass Strip** (`Sensor.TYPE_ROTATION_VECTOR`) points continuously toward the nearest Seeker with real-time distance readouts.
 - ⭕ **Dynamic Circular Geofencing**:
   - Organizers draw a circular play zone between **200m and 2km** radius.

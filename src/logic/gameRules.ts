@@ -134,9 +134,9 @@ export function assignPlayerRoles(
 }
 
 /**
- * Determines if Seeker is close enough (< 10m) to catch a Hider.
+ * Determines if Seeker is close enough (< 25m) to catch a Hider.
  */
-export function canAttemptCatch(seekerCoord: LatLng, hiderCoord: LatLng, maxDistMeters = 10): boolean {
+export function canAttemptCatch(seekerCoord: LatLng, hiderCoord: LatLng, maxDistMeters = 25): boolean {
   const dist = calculateDistanceMeters(seekerCoord, hiderCoord);
   return dist <= maxDistMeters;
 }

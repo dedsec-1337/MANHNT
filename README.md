@@ -26,7 +26,7 @@ MANHNT is the opposite: native Android, no accounts, no ads, no tiers. Clone it,
 
 | Role | What you see | Goal |
 |------|--------------|------|
-| **Seeker** | Live map of free Hiders (except when they Stealth) | Tag within 10 m + enter their 4-digit code |
+| **Seeker** | Live map of free Hiders (except when they Stealth) | Tag within 25 m + enter their 4-digit code |
 | **Hider** | Stealth map + rotating compass toward nearest Seeker | Survive the timer or free teammates from Jail |
 
 ---
@@ -61,7 +61,7 @@ MANHNT is the opposite: native Android, no accounts, no ads, no tiers. Clone it,
 2. Host creates a room, sets radius / duration / head start, shares the 6-character code.
 3. Others join. Host starts.
 4. Head start ends → Seekers hunt.
-5. Tag = within 10 m + correct 4-digit code → Hider goes to **Jail** (if enabled).
+5. Tag = within 25 m + correct 4-digit code → Hider goes to **Jail** (if enabled).
 6. Free Hider enters Jail circle and holds jailbreak → prisoners freed with short immunity.
 7. Timer hits zero with anyone free → Hiders win. All caught → Seekers win.
 
