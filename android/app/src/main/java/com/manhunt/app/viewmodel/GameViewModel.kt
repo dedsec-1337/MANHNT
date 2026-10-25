@@ -79,6 +79,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val firebaseAuthMutex = Mutex()
     private var jailbreakJob: Job? = null
     private var lastHandledCatchAttemptTimestamp: Long = 0L
+    private var lastHandledCatchConfirmCreatedAt: Long = 0L
 
     init {
         viewModelScope.launch {
@@ -171,7 +172,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val authenticatedPlayer = ensureFirebasePlayerIdentity()
                 val room = firebaseSync.fetchRoomData(upper)
                 if (room != null) {
-                    val me = authenticatedPlayer.copy(catchCode = if (authenticatedPlayer.role == Role.HIDER) RandomCode.generateNumericCode(4) else "")
+                    val me = authenticatedPlayer.copy(role = Role.SEEKER, catchCode = "")
                     if (firebaseSync.joinPlayer(upper, me)) {
                         _uiState.update { it.copy(session = room.session, players = room.players.values.toList(), myPlayer = me, isOrganizer = room.session.hostPlayerId == me.id, isJoiningRoom = false, currentDynamicRadiusMeters = room.session.currentDynamicZoneRadiusMeters, toastMessage = "Joined ${room.session.roomName}!" ) }
                         onComplete(true)
@@ -388,12 +389,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun respondToCatchConfirm(accept: Boolean) {
         val pending = _uiState.value.pendingCatchConfirm ?: return
         val me = _uiState.value.myPlayer
-        if (pending.targetHiderId != me.id) return
+        if (pending.targetHiderId != me.id || pending.status != "PENDING") return
         val s = _uiState.value.session ?: return
+        val response = if (accept || me.disputesRemaining <= 0) "ACCEPTED" else "REJECTED"
         viewModelScope.launch {
-            if (accept) firebaseSync.joinPlayer(s.joinCode, me.copy(isCaught = true, isInJail = s.jailEnabled, isStealthActive = false))
-            else if (me.disputesRemaining > 0) firebaseSync.joinPlayer(s.joinCode, me.copy(disputesRemaining = me.disputesRemaining - 1))
-            _uiState.update { it.copy(pendingCatchConfirm = null) }
+            val updated = firebaseSync.respondToPendingCatchConfirm(s.joinCode, response)
+            if (!updated) {
+                _uiState.update { it.copy(toastMessage = "Catch response could not sync. Check your connection.") }
+            } else {
+                _uiState.update { it.copy(pendingCatchConfirm = pending.copy(status = response)) }
+            }
         }
     }
 
@@ -466,6 +471,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             lastHandledCatchAttemptTimestamp = attempt.timestamp
             processCatchAttempt(attempt)
         }
+        val pendingCatch = room.pendingCatchConfirm
+        if (state.isOrganizer && pendingCatch != null) {
+            if (pendingCatch.status != "PENDING" && pendingCatch.createdAtEpochMs > lastHandledCatchConfirmCreatedAt) {
+                lastHandledCatchConfirmCreatedAt = pendingCatch.createdAtEpochMs
+                processCatchConfirmation(pendingCatch)
+            } else if (pendingCatch.status == "PENDING" && pendingCatch.expiresAtEpochMs > 0L && now >= pendingCatch.expiresAtEpochMs) {
+                lastHandledCatchConfirmCreatedAt = maxOf(lastHandledCatchConfirmCreatedAt, pendingCatch.createdAtEpochMs)
+                viewModelScope.launch { firebaseSync.clearPendingCatchConfirm(session.joinCode) }
+            }
+        }
         if (state.isOrganizer && jailbreakJob?.isActive != true) {
             room.players.values.firstOrNull {
                 it.role == Role.HIDER && !it.isCaught && !it.isInJail && it.jailbreakHoldStartedAtEpochMs > 0L
@@ -512,15 +527,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!seekerFrozen && session != null && session.status == GameStatus.RUNNING && session.joinCode.isNotEmpty()) {
             viewModelScope.launch { firebaseSync.updateLocation(session.joinCode, me.id, lat, lng, geofence.isOutside) }
         }
-        if (session != null && session.joinCode.isNotEmpty() &&
-            (previousMe.isInSafeZone != me.isInSafeZone || previousMe.safeZoneName != me.safeZoneName)) {
-            viewModelScope.launch {
-                firebaseSync.patchPlayer(session.joinCode, me.id, mapOf(
-                    "isInSafeZone" to me.isInSafeZone,
-                    "safeZoneName" to (me.safeZoneName ?: "")
-                ))
-            }
-        }
         recalculateDistancesAndProximity()
     }
 
@@ -542,13 +548,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (distance >= 0.0) hapticManager.evaluateProximityHaptics(distance)
             _uiState.update { it.copy(nearestSeekerDistance = distance, nearestSeekerBearing = bearing, nearbyCatchableHider = null) }
         } else {
+            val session = state.session
             val hiders = others.filter { it.role == Role.HIDER && !it.isCaught }
+            fun isActuallyInSafeZone(player: Player): Boolean = session?.safeZones?.any { zone ->
+                GeoUtils.distanceMeters(player.latitude, player.longitude, zone.latitude, zone.longitude) <= zone.radiusMeters
+            } == true
             val catchable = hiders.firstOrNull { hider ->
-                !hider.isInSafeZone && hider.immunityUntilEpochMs <= System.currentTimeMillis() &&
+                !isActuallyInSafeZone(hider) && hider.immunityUntilEpochMs <= System.currentTimeMillis() &&
                     hider.latitude != 0.0 && hider.longitude != 0.0 &&
                     GeoUtils.distanceMeters(me.latitude, me.longitude, hider.latitude, hider.longitude) <= Constants.CATCH_PROXIMITY_METERS
             }
-            val protected = hiders.firstOrNull { it.isInSafeZone }
+            val protected = hiders.firstOrNull { isActuallyInSafeZone(it) }
             _uiState.update {
                 it.copy(nearbyCatchableHider = catchable, safeZoneNotice = protected?.let { h -> "${h.name} is protected in ${h.safeZoneName?.takeIf { it.isNotBlank() } ?: "Safe Zone"}!" })
             }
@@ -558,24 +568,71 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun processCatchAttempt(attempt: CatchAttemptPayload) {
         val state = _uiState.value
         val session = state.session ?: return
+        val now = System.currentTimeMillis()
         if (!state.isOrganizer || session.status != GameStatus.RUNNING || session.isPaused) return
+        if (attempt.timestamp > now + 5_000L || now - attempt.timestamp > 30_000L) return
+        val existingPending = state.pendingCatchConfirm
+        if (existingPending != null && existingPending.expiresAtEpochMs > now) return
         val seeker = state.players.firstOrNull { it.id == attempt.seekerId } ?: return
         val target = state.players.firstOrNull { it.id == attempt.targetHiderId } ?: return
-        if (seeker.role != Role.SEEKER || target.role != Role.HIDER || target.isCaught || target.isInSafeZone) return
-        if (target.immunityUntilEpochMs > System.currentTimeMillis()) return
-        if (seeker.id == target.id || seeker.id != attempt.seekerId) return
+        if (seeker.id != attempt.seekerId || seeker.role != Role.SEEKER ||
+            target.role != Role.HIDER || target.isCaught || target.isInJail) return
+        if (target.immunityUntilEpochMs > now) return
+        if (seeker.id == target.id) return
+        val targetInSafeZone = session.safeZones.any { zone ->
+            GeoUtils.distanceMeters(target.latitude, target.longitude, zone.latitude, zone.longitude) <= zone.radiusMeters
+        }
+        if (targetInSafeZone) return
         val distance = GeoUtils.distanceMeters(seeker.latitude, seeker.longitude, target.latitude, target.longitude)
         if (distance > Constants.CATCH_PROXIMITY_METERS || target.catchCode.trim() != attempt.enteredCode.trim()) return
-        val sendToJail = session.jailEnabled && session.jailLat != 0.0
-        val caught = target.copy(isCaught = true, isInJail = sendToJail, isStealthActive = false)
+        val pending = CatchConfirmPayload(
+            seekerId = seeker.id,
+            targetHiderId = target.id,
+            seekerName = seeker.name,
+            distanceMeters = distance,
+            createdAtEpochMs = now,
+            expiresAtEpochMs = now + Constants.CATCH_CONFIRM_TIMEOUT_SECONDS * 1000L,
+            status = "PENDING"
+        )
         viewModelScope.launch {
+            if (!firebaseSync.createPendingCatchConfirm(session.joinCode, pending)) {
+                _uiState.update { it.copy(toastMessage = "Catch confirmation could not sync. Check Firebase rules and connection.") }
+            }
+        }
+    }
+
+    private fun processCatchConfirmation(pending: CatchConfirmPayload) {
+        val state = _uiState.value
+        val session = state.session ?: return
+        if (!state.isOrganizer) return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val target = _uiState.value.players.firstOrNull { it.id == pending.targetHiderId }
+            val seeker = _uiState.value.players.firstOrNull { it.id == pending.seekerId }
+            if (pending.expiresAtEpochMs < now || session.status != GameStatus.RUNNING || session.isPaused ||
+                target == null || seeker == null || target.role != Role.HIDER || seeker.role != Role.SEEKER ||
+                target.isCaught || target.isInJail) {
+                firebaseSync.clearPendingCatchConfirm(session.joinCode)
+                return@launch
+            }
+
+            if (pending.status == "REJECTED" && target.disputesRemaining > 0) {
+                firebaseSync.joinPlayer(session.joinCode, target.copy(disputesRemaining = target.disputesRemaining - 1))
+                firebaseSync.clearPendingCatchConfirm(session.joinCode)
+                _uiState.update { it.copy(toastMessage = "Catch disputed") }
+                return@launch
+            }
+
+            val sendToJail = session.jailEnabled && session.jailLat != 0.0
+            val caught = target.copy(isCaught = true, isInJail = sendToJail, isStealthActive = false)
             if (firebaseSync.joinPlayer(session.joinCode, caught)) {
                 _uiState.update { current ->
                     current.copy(players = current.players.map { player -> if (player.id == target.id) caught else player })
                 }
-                val remainingHiders = state.players.filter { it.role == Role.HIDER && it.id != target.id && !it.isCaught }
+                val remainingHiders = _uiState.value.players.filter { it.role == Role.HIDER && it.id != target.id && !it.isCaught }
                 if (remainingHiders.isEmpty()) endGame(Role.SEEKER)
             }
+            firebaseSync.clearPendingCatchConfirm(session.joinCode)
         }
     }
 
