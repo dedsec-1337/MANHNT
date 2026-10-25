@@ -21,7 +21,7 @@ import com.manhunt.app.data.model.AppearanceMode
 import com.manhunt.app.data.model.AppearanceSettings
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF343632),
+    primary = AccentPalettes.DefaultLight,
     secondary = AppleSeekerOrange,
     tertiary = AppleHiderPurple,
     background = AppleBackgroundLight,
@@ -37,7 +37,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFD8D7CE),
+    primary = AccentPalettes.DefaultDark,
     secondary = AppleSeekerOrange,
     tertiary = AppleHiderPurple,
     background = AppleBackgroundDark,
@@ -79,12 +79,14 @@ fun ManhuntTheme(
     } else {
         baseColorScheme
     }
-    val colorScheme: ColorScheme = when (settings.accent) {
-        AccentMode.DEFAULT, AccentMode.SYSTEM_COLORS -> systemColorScheme
-        AccentMode.BLUE -> systemColorScheme.copy(
-            primary = if (darkTheme) AppleAccentBlueDark else Color(0xFF48677D),
-            onPrimary = if (darkTheme) Color(0xFF171A1D) else Color.White
+    val palette = AccentPalettes.palette(settings.accent)
+    val colorScheme: ColorScheme = when {
+        settings.accent == AccentMode.SYSTEM_COLORS -> systemColorScheme
+        palette != null -> baseColorScheme.copy(
+            primary = if (darkTheme) palette.darkPrimary else palette.lightPrimary,
+            onPrimary = if (darkTheme) palette.darkOnPrimary else palette.lightOnPrimary
         )
+        else -> baseColorScheme
     }
     val view = LocalView.current
     if (!view.isInEditMode) {
