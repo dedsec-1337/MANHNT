@@ -79,9 +79,8 @@ class FirebaseSyncService private constructor() {
 
     init {
         val logging = HttpLoggingInterceptor().apply {
-            // Firebase ID tokens are sent in the "auth" query parameter for REST requests.
-            // Never allow HTTP logs to expose that credential.
-            redactQueryParams("auth")
+            // AuthTokenInterceptor uses the Authorization header; always redact credentials.
+            redactHeader("Authorization")
             level = HttpLoggingInterceptor.Level.BASIC
         }
 
