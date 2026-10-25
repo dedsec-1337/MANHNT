@@ -40,6 +40,7 @@ fun GameScreen(
     val session = state.session ?: return
     var showCatchSheetForHider by remember { mutableStateOf<Player?>(null) }
     var showLeaveConfirmDialog by remember { mutableStateOf(false) }
+    var dismissedCatchConfirmAt by remember { mutableStateOf(0L) }
 
     val remaining = session.remainingSeconds
     val mins = remaining / 60
@@ -544,10 +545,11 @@ fun GameScreen(
         val pendingCatch = state.pendingCatchConfirm
         if (pendingCatch != null &&
             pendingCatch.status == "PENDING" &&
-            pendingCatch.targetHiderId == state.myPlayer.id
+            pendingCatch.targetHiderId == state.myPlayer.id &&
+            pendingCatch.createdAtEpochMs != dismissedCatchConfirmAt
         ) {
             AlertDialog(
-                onDismissRequest = {},
+                onDismissRequest = { dismissedCatchConfirmAt = pendingCatch.createdAtEpochMs },
                 title = { Text("Confirm catch") },
                 text = {
                     val disputesLeft = state.myPlayer.disputesRemaining
@@ -560,14 +562,19 @@ fun GameScreen(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { onRespondToCatchConfirm(true) }) {
-                        Text("Confirm catch")
-                    }
-                },
-                dismissButton = {
-                    if (state.myPlayer.disputesRemaining > 0) {
-                        TextButton(onClick = { onRespondToCatchConfirm(false) }) {
-                            Text("Dispute (${state.myPlayer.disputesRemaining} left)")
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = { onRespondToCatchConfirm(true) }) {
+                            Text("Confirm catch")
+                        }
+                        if (state.myPlayer.disputesRemaining > 0) {
+                            TextButton(onClick = { onRespondToCatchConfirm(false) }) {
+                                Text("Dispute (${state.myPlayer.disputesRemaining} left)")
+                            }
+                        }
+                        TextButton(onClick = {
+                            dismissedCatchConfirmAt = pendingCatch.createdAtEpochMs
+                        }) {
+                            Text("Later")
                         }
                     }
                 }

@@ -297,9 +297,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (submitted) {
                 hapticManager.triggerCatchConfirmation()
                 _uiState.update {
-                    it.copy(toastMessage = "Correct code. Waiting for ${target.name} to confirm or dispute the catch.")
+                    it.copy(toastMessage = "Catch attempt sent to the host.")
                 }
-                onResult(true, "Catch submitted for confirmation")
+                onResult(true, "Catch attempt sent")
             } else {
                 _uiState.update { it.copy(toastMessage = "Catch attempt could not sync. Check the code, connection, and room rules.") }
                 onResult(false, "Catch attempt rejected")
