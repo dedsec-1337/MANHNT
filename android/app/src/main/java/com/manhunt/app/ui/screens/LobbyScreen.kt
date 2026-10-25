@@ -12,6 +12,8 @@ import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,11 +30,13 @@ import com.manhunt.app.ui.components.AppleSecondaryButton
 import com.manhunt.app.ui.components.RoleBadge
 import com.manhunt.app.ui.theme.*
 import com.manhunt.app.viewmodel.GameUiState
+import kotlinx.coroutines.flow.StateFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LobbyScreen(
     state: GameUiState,
+    headingFlow: StateFlow<Float>,
     onStartGameClick: () -> Unit,
     onToggleRole: (playerId: String) -> Unit,
     onAutoBalanceRoles: () -> Unit,
@@ -209,25 +213,9 @@ fun LobbyScreen(
                             color = AppleTextSecondary,
                             lineHeight = 17.sp
                         )
-                        OSMMapView(
-                            playerLat = state.myPlayer.latitude,
-                            playerLng = state.myPlayer.longitude,
-                            userRole = state.myPlayer.role,
-                            zoneCenterLat = session.zoneCenterLat,
-                            zoneCenterLng = session.zoneCenterLng,
-                            zoneRadiusMeters = session.zoneRadiusMeters,
-                            isUnlimitedZone = session.isUnlimitedZone,
-                            safeZones = session.safeZones,
-                            otherPlayers = emptyList(),
-                            headingDegrees = state.headingDegrees,
-                            hasHeading = state.hasCompassHeading,
-                            centerOnPlayer = false,
-                            showOtherPlayerLocations = false,
-                            initialZoom = when {
-                                session.isUnlimitedZone -> 13.0
-                                session.zoneRadiusMeters >= 2000.0 -> 13.0
-                                else -> 14.0
-                            },
+                        LobbyMapPreview(
+                            state = state,
+                            headingFlow = headingFlow,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(230.dp)
@@ -433,4 +421,35 @@ fun LobbyScreen(
             item { Spacer(modifier = Modifier.height(30.dp)) }
         }
     }
+}
+
+@Composable
+private fun LobbyMapPreview(
+    state: GameUiState,
+    headingFlow: StateFlow<Float>,
+    modifier: Modifier
+) {
+    val headingDegrees by headingFlow.collectAsState()
+    val session = state.session ?: return
+    OSMMapView(
+        playerLat = state.myPlayer.latitude,
+        playerLng = state.myPlayer.longitude,
+        userRole = state.myPlayer.role,
+        zoneCenterLat = session.zoneCenterLat,
+        zoneCenterLng = session.zoneCenterLng,
+        zoneRadiusMeters = session.zoneRadiusMeters,
+        isUnlimitedZone = session.isUnlimitedZone,
+        safeZones = session.safeZones,
+        otherPlayers = emptyList(),
+        headingDegrees = headingDegrees,
+        hasHeading = state.hasCompassHeading,
+        centerOnPlayer = false,
+        showOtherPlayerLocations = false,
+        initialZoom = when {
+            session.isUnlimitedZone -> 13.0
+            session.zoneRadiusMeters >= 2000.0 -> 13.0
+            else -> 14.0
+        },
+        modifier = modifier
+    )
 }

@@ -3,7 +3,6 @@ package com.manhunt.app.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,7 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Person
@@ -36,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,7 +65,7 @@ fun HomeScreen(
 ) {
     var inputCode by remember { mutableStateOf("") }
     var showRecap by remember { mutableStateOf(false) }
-    var showHero by remember { mutableStateOf(false) }
+    var showHero by rememberSaveable { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
 
     LaunchedEffect(Unit) { showHero = true }
@@ -116,8 +116,8 @@ fun HomeScreen(
             item {
                 AnimatedVisibility(
                     visible = showHero,
-                    enter = fadeIn(tween(MotionTokens.CardEntranceMillis)) +
-                        slideInVertically(tween(MotionTokens.CardEntranceMillis)) { it / 12 }
+                    enter = fadeIn(MotionTokens.smoothTween(MotionTokens.CardEntranceMillis)) +
+                        slideInVertically(MotionTokens.CardOffset) { it / 24 }
                 ) {
                     Card(
                         shape = RoundedCornerShape(26.dp),
@@ -198,7 +198,7 @@ fun HomeScreen(
                                 color = if (inputCode.length >= 4 && !state.isJoiningRoom) colors.primary else colors.surfaceVariant
                             ) {
                                 Icon(
-                                    Icons.Default.ArrowForward,
+                                    Icons.AutoMirrored.Filled.ArrowForward,
                                     contentDescription = "Join hunt",
                                     modifier = Modifier.padding(15.dp),
                                     tint = if (inputCode.length >= 4 && !state.isJoiningRoom) colors.onPrimary else colors.onSurfaceVariant

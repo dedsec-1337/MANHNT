@@ -28,7 +28,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.core.tween
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.view.WindowCompat
@@ -202,6 +201,7 @@ class MainActivity : ComponentActivity() {
                             if (activeMatch) {
                                 GameScreen(
                                     state = uiState,
+                                    headingFlow = viewModel.headingDegrees,
                                     onToggleSafetyPause = { viewModel.toggleSafetyPause() },
                                     onAttemptCatch = { targetHiderId, code ->
                                         viewModel.attemptCatch(targetHiderId, code) { _, _ -> }
@@ -237,11 +237,11 @@ class MainActivity : ComponentActivity() {
                                 targetState = route,
                                 modifier = Modifier.fillMaxSize(),
                                 transitionSpec = {
-                                    (fadeIn(tween(MotionTokens.ScreenTransitionMillis)) +
-                                        slideInHorizontally(tween(MotionTokens.ScreenTransitionMillis)) { it / 16 })
+                                    (fadeIn(MotionTokens.smoothTween(MotionTokens.ScreenTransitionMillis)) +
+                                        slideInHorizontally(MotionTokens.NavigationOffset) { it / 24 })
                                         .togetherWith(
-                                            fadeOut(tween(MotionTokens.ScreenTransitionMillis)) +
-                                                slideOutHorizontally(tween(MotionTokens.ScreenTransitionMillis)) { -it / 16 }
+                                            fadeOut(MotionTokens.smoothTween(MotionTokens.ScreenTransitionMillis)) +
+                                                slideOutHorizontally(MotionTokens.NavigationOffset) { -it / 24 }
                                         )
                                 },
                                 label = "fieldPlayNavigation"
@@ -290,6 +290,7 @@ class MainActivity : ComponentActivity() {
                                         } else {
                                             LobbyScreen(
                                                 state = uiState,
+                                                headingFlow = viewModel.headingDegrees,
                                                 onStartGameClick = { viewModel.startGame() },
                                                 onToggleRole = { playerId -> viewModel.togglePlayerRole(playerId) },
                                                 onAutoBalanceRoles = { viewModel.autoAssignRoles() },

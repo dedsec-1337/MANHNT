@@ -39,7 +39,6 @@ data class GameUiState(
     val players: List<Player> = emptyList(),
     val roomSignals: Map<String, GameSignalPayload> = emptyMap(),
     val isOrganizer: Boolean = false,
-    val headingDegrees: Float = 0f,
     val hasCompassHeading: Boolean = false,
     val nearestSeekerDistance: Double = -1.0,
     val nearestSeekerBearing: Float = 0f,
@@ -88,6 +87,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         GameUiState(appearanceSettings = loadAppearanceSettings())
     )
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
+    private val _headingDegrees = MutableStateFlow(0f)
+    val headingDegrees: StateFlow<Float> = _headingDegrees.asStateFlow()
     private var countdownTimerJob: Job? = null
     private var startGameInFlight = false
     private var lastQuickSignalSentAtEpochMs = 0L
@@ -128,7 +129,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             compass.azimuthFlow.collect { heading ->
-                _uiState.update { it.copy(headingDegrees = heading) }
+                _headingDegrees.value = heading
             }
         }
         viewModelScope.launch {
