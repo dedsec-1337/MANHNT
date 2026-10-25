@@ -34,19 +34,24 @@ function player(id, role = "SEEKER") {
     avatarEmoji: "🏃",
     role,
     isCaught: false,
-    catchCode: role === "HIDER" ? "1234" : "",
-    latitude: 22.5726,
-    longitude: 88.3639,
-    isOutOfZone: false,
     isInSafeZone: false,
-    lastUpdatedEpochMs: Date.now(),
     isInJail: false,
     immunityUntilEpochMs: 0,
     isStealthActive: false,
     stealthUntilEpochMs: 0,
     stealthCooldownUntilEpochMs: 0,
     disputesRemaining: 2,
-    jailbreakHoldStartedAtEpochMs: 0
+    jailbreakHoldStartedAtEpochMs: 0,
+    stealthActivationRequestedAtEpochMs: 0
+  };
+}
+
+function location() {
+  return {
+    latitude: 22.5726,
+    longitude: 88.3639,
+    isOutOfZone: false,
+    lastUpdatedEpochMs: Date.now()
   };
 }
 
@@ -65,13 +70,24 @@ function pendingCatchConfirm() {
 
 async function seedRoom() {
   await testEnv.withSecurityRulesDisabled(async (context) => {
-    await set(ref(context.database(), roomPath), {
+    const db = context.database();
+    await set(ref(db, roomPath), {
       session: session(),
       players: {
         "host-uid": player("host-uid"),
         "seeker-uid": player("seeker-uid"),
         "hider-uid": player("hider-uid", "HIDER")
       }
+    });
+    await set(ref(db, `roomPrivate/${roomCode}/locations`), {
+      "host-uid": location(),
+      "seeker-uid": location(),
+      "hider-uid": location()
+    });
+    await set(ref(db, `roomPrivate/${roomCode}/catchCodes`), {
+      "host-uid": "",
+      "seeker-uid": "",
+      "hider-uid": "1234"
     });
   });
 }
@@ -100,6 +116,41 @@ test("unauthenticated users cannot read rooms", async () => {
   await assertFails(get(ref(testEnv.unauthenticatedContext().database(), roomPath)));
 });
 
+test("authenticated non-members cannot read the room tree but can look up the join session", async () => {
+  await seedRoom();
+  const visitorDb = testEnv.authenticatedContext("visitor-uid").database();
+  await assertFails(get(ref(visitorDb, roomPath)));
+  const sessionSnapshot = await assertSucceeds(get(ref(visitorDb, `${roomPath}/session`)));
+  assert.equal(sessionSnapshot.val().roomName, "Rules Test");
+});
+
+test("only room members can read private player locations", async () => {
+  await seedRoom();
+  const memberDb = testEnv.authenticatedContext("seeker-uid").database();
+  const visitorDb = testEnv.authenticatedContext("visitor-uid").database();
+  const locations = await assertSucceeds(get(ref(memberDb, `roomPrivate/${roomCode}/locations`)));
+  assert.equal(locations.child("hider-uid/latitude").val(), 22.5726);
+  await assertFails(get(ref(visitorDb, `roomPrivate/${roomCode}/locations`)));
+  await assertSucceeds(set(ref(memberDb, `roomPrivate/${roomCode}/locations/seeker-uid`), location()));
+  await assertFails(set(ref(memberDb, `roomPrivate/${roomCode}/locations/hider-uid`), location()));
+});
+
+test("catch codes are private to their owner and the host", async () => {
+  await seedRoom();
+  const hostDb = testEnv.authenticatedContext("host-uid").database();
+  const hiderDb = testEnv.authenticatedContext("hider-uid").database();
+  const seekerDb = testEnv.authenticatedContext("seeker-uid").database();
+  const visitorDb = testEnv.authenticatedContext("visitor-uid").database();
+  const ownCode = await assertSucceeds(get(ref(hiderDb, `roomPrivate/${roomCode}/catchCodes/hider-uid`)));
+  assert.equal(ownCode.val(), "1234");
+  await assertFails(get(ref(seekerDb, `roomPrivate/${roomCode}/catchCodes/hider-uid`)));
+  await assertFails(get(ref(visitorDb, `roomPrivate/${roomCode}/catchCodes`)));
+  const allCodes = await assertSucceeds(get(ref(hostDb, `roomPrivate/${roomCode}/catchCodes`)));
+  assert.equal(allCodes.child("hider-uid").val(), "1234");
+  await assertFails(set(ref(hiderDb, `roomPrivate/${roomCode}/catchCodes/hider-uid`), "9999"));
+  await assertSucceeds(set(ref(hostDb, `roomPrivate/${roomCode}/catchCodes/hider-uid`), "5678"));
+});
+
 test("an authenticated host can create a room with its UID as hostPlayerId", async () => {
   const db = testEnv.authenticatedContext("host-uid").database();
   await assertSucceeds(set(ref(db, roomPath), {
@@ -124,15 +175,11 @@ test("a joining user can create only their own initial Seeker record", async () 
   await assertFails(set(ref(db, `${roomPath}/players/new-hider-uid`), player("new-hider-uid", "HIDER")));
 });
 
-test("a player can update location and profile but cannot change protected gameplay state", async () => {
+test("a player can update profile but cannot put private location or protected state in public player data", async () => {
   await seedRoom();
   const db = testEnv.authenticatedContext("hider-uid").database();
-  await assertSucceeds(update(ref(db, `${roomPath}/players/hider-uid`), {
-    latitude: 22.573,
-    longitude: 88.364,
-    lastUpdatedEpochMs: Date.now(),
-    name: "Updated Hider"
-  }));
+  await assertSucceeds(update(ref(db, `${roomPath}/players/hider-uid`), { name: "Updated Hider" }));
+  await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { latitude: 22.573, longitude: 88.364 }));
   await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { isCaught: true }));
   await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { isInJail: true }));
   await assertFails(update(ref(db, `${roomPath}/players/hider-uid`), { catchCode: "9999" }));
@@ -159,8 +206,7 @@ test("the host can update another player's role and session", async () => {
   await seedRoom();
   const db = testEnv.authenticatedContext("host-uid").database();
   await assertSucceeds(set(ref(db, `${roomPath}/players/hider-uid`), {
-    ...player("hider-uid", "SEEKER"),
-    catchCode: ""
+    ...player("hider-uid", "SEEKER")
   }));
   await assertSucceeds(update(ref(db, `${roomPath}/session`), { remainingSeconds: 540 }));
 });
