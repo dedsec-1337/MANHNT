@@ -81,8 +81,7 @@ data class LocationPayload(
 data class RoomJoinInfo(
     val roomName: String = "",
     val joinCode: String = "",
-    val hostPlayerId: String = "",
-    val status: GameStatus = GameStatus.LOBBY
+    val hostPlayerId: String = ""
 )
 
 data class RoomNetworkModel(
