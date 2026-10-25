@@ -1,5 +1,7 @@
 package com.manhunt.app.data.model
 
+import com.google.gson.annotations.SerializedName
+
 enum class Role { SEEKER, HIDER }
 enum class GameStatus { LOBBY, RUNNING, PAUSED, FINISHED }
 enum class NetworkSyncStatus { ONLINE, SYNCING, OFFLINE }
@@ -77,7 +79,7 @@ data class LocationPayload(
 
 data class RoomNetworkModel(
     val session: GameSession = GameSession(),
-    val players: Map<String, Player> = emptyMap(),
+    @SerializedName("publicPlayers") val players: Map<String, Player> = emptyMap(),
     val lastCatchAttempt: CatchAttemptPayload? = null,
     val pendingCatchConfirm: CatchConfirmPayload? = null
 )
