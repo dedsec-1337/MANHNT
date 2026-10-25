@@ -77,3 +77,50 @@ jobs:
           else
             echo "No shell scripts to check"
           fi
+
+  android-build:
+    name: Android compile and debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Accept Android SDK licenses
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          yes | "$SDKMANAGER" --licenses
+      - name: Install Android SDK 34
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.6"
+      - name: Compile Kotlin and assemble debug APK
+        working-directory: android
+        run: gradle --no-daemon :app:compileDebugKotlin :app:assembleDebug
+
+  firebase-rules-tests:
+    name: Firebase Realtime Database rules tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install rules test dependencies
+        working-directory: firebase
+        run: npm install --no-audit --no-fund
+      - name: Run rules tests in the Firebase Emulator
+        working-directory: firebase
+        run: npm run test:rules

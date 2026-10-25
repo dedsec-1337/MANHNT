@@ -6,6 +6,8 @@
 4. `GameViewModel` now signs in anonymously when needed and uses the Firebase Authentication UID as `Player.id` and the player database key, with `session.hostPlayerId` set to the authenticated host UID.
 5. Test room creation, joining, player updates/deletion, session updates, catch attempts, and catch confirmations with the Firebase Emulator or Rules Playground before using live games.
 
+For automated rules checks, run `npm install` and `npm run test:rules` from this directory. The test command starts the Realtime Database Emulator and checks representative allowed and denied operations. These tests do not publish rules to your live Firebase project.
+
 ## Security notes
 
 - Do not grant `.write: auth != null` at `/rooms/$joinCode`. Realtime Database rules cascade, so a broad parent write grant bypasses narrower child rules.

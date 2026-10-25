@@ -18,6 +18,7 @@ import com.manhunt.app.util.GeofenceStatus
 import com.manhunt.app.util.HapticFeedbackManager
 import com.manhunt.app.util.RandomCode
 import com.google.firebase.auth.FirebaseAuth
+import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -28,8 +29,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
-// FULL FILE IS IN PROJECT ARTIFACTS: GameViewModel.kt / manhnt-viewmodel-patch.zip
-// This bootstrap keeps CI green until the full 32KB file is applied locally.
+/** Coordinates local gameplay state with Firebase room sync, location, and match mechanics. */
 
 data class GameUiState(
     val myPlayer: Player = Player(id = UUID.randomUUID().toString(), name = "Runner", avatarEmoji = "🏃"),
@@ -78,6 +78,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var countdownTimerJob: Job? = null
     private val firebaseAuthMutex = Mutex()
     private var jailbreakJob: Job? = null
+    private var lastHandledCatchAttemptTimestamp: Long = 0L
 
     init {
         viewModelScope.launch {
@@ -88,6 +89,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.update {
                         it.copy(myPlayer = it.myPlayer.copy(id = uid, name = profile.displayName, avatarEmoji = profile.avatarEmoji))
                     }
+                    if (profile.id != uid) {
+                        db.playerProfileDao().upsertProfile(PlayerProfileEntity(uid, profile.displayName, profile.avatarEmoji))
+                    }
+                } else {
+                    val newProfile = PlayerProfileEntity(uid, "Agent ${RandomCode.generateCode(3)}", "🏃")
+                    db.playerProfileDao().upsertProfile(newProfile)
+                    _uiState.update { it.copy(myPlayer = it.myPlayer.copy(id = uid, name = newProfile.displayName, avatarEmoji = newProfile.avatarEmoji)) }
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(toastMessage = "Firebase sign-in failed. Check your connection and Anonymous Authentication settings.") }
@@ -104,6 +112,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 refreshStealthState()
             }
         }
+        refreshBatteryOptimizationStatus()
     }
 
     private suspend fun ensureFirebasePlayerIdentity(): Player = firebaseAuthMutex.withLock {
@@ -121,10 +130,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val authenticatedPlayer = ensureFirebasePlayerIdentity()
+                val lastLocation = if (centerLat == 0.0 || centerLng == 0.0 || (authenticatedPlayer.latitude == 0.0 && authenticatedPlayer.longitude == 0.0)) {
+                    try { LocationServices.getFusedLocationProviderClient(getApplication<Application>()).lastLocation.await() } catch (_: Exception) { null }
+                } else null
+                val resolvedLat = if (centerLat != 0.0) centerLat else authenticatedPlayer.latitude.takeIf { it != 0.0 } ?: lastLocation?.latitude ?: 0.0
+                val resolvedLng = if (centerLng != 0.0) centerLng else authenticatedPlayer.longitude.takeIf { it != 0.0 } ?: lastLocation?.longitude ?: 0.0
+                if (resolvedLat == 0.0 && resolvedLng == 0.0) {
+                    _uiState.update { it.copy(isCreatingRoom = false, toastMessage = "Location unavailable. Allow location access and try again.") }
+                    onComplete(false)
+                    return@launch
+                }
                 val joinCode = RandomCode.generateCode(6)
-                val host = authenticatedPlayer.copy(role = Role.SEEKER, latitude = centerLat, longitude = centerLng)
+                val host = authenticatedPlayer.copy(role = Role.SEEKER, latitude = resolvedLat, longitude = resolvedLng)
                 val radius = when (zoneSizePreset) { "2000m" -> 2000.0; "UNLIMITED" -> 50000.0; else -> 1000.0 }
-                val session = GameSession(roomId = UUID.randomUUID().toString(), roomName = roomName, joinCode = joinCode, hostPlayerId = host.id, status = GameStatus.LOBBY, zoneCenterLat = centerLat, zoneCenterLng = centerLng, zoneRadiusMeters = radius, durationMinutes = durationMinutes, remainingSeconds = durationMinutes * 60, zoneSizePreset = zoneSizePreset, isUnlimitedZone = zoneSizePreset.equals("UNLIMITED", true), headStartMinutes = headStartMinutes, headStartRemainingSeconds = headStartMinutes * 60, isShrinkingZoneEnabled = isShrinkingZoneEnabled, currentDynamicZoneRadiusMeters = radius, autoPingIntervalMinutes = autoPingIntervalMinutes, safeZones = safeZones, jailEnabled = true, jailLat = centerLat, jailLng = centerLng, jailRadiusMeters = Constants.JAIL_RADIUS_METERS)
+                val session = GameSession(roomId = UUID.randomUUID().toString(), roomName = roomName, joinCode = joinCode, hostPlayerId = host.id, status = GameStatus.LOBBY, zoneCenterLat = resolvedLat, zoneCenterLng = resolvedLng, zoneRadiusMeters = radius, durationMinutes = durationMinutes, remainingSeconds = durationMinutes * 60, zoneSizePreset = zoneSizePreset, isUnlimitedZone = zoneSizePreset.equals("UNLIMITED", true), headStartMinutes = headStartMinutes, headStartRemainingSeconds = headStartMinutes * 60, isShrinkingZoneEnabled = isShrinkingZoneEnabled, currentDynamicZoneRadiusMeters = radius, autoPingIntervalMinutes = autoPingIntervalMinutes, safeZones = safeZones, jailEnabled = true, jailLat = resolvedLat, jailLng = resolvedLng, jailRadiusMeters = Constants.JAIL_RADIUS_METERS)
                 if (firebaseSync.createRoom(RoomNetworkModel(session = session, players = mapOf(host.id to host)))) {
                     _uiState.update { it.copy(session = session, myPlayer = host, players = listOf(host), isCreatingRoom = false, isOrganizer = true, toastMessage = "Room $joinCode") }
                     onComplete(true)
@@ -141,6 +160,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun joinRoom(code: String, onComplete: (Boolean) -> Unit = {}) {
         val upper = code.trim().uppercase()
+        if (upper.length < 4) {
+            _uiState.update { it.copy(toastMessage = "Enter a valid room code") }
+            onComplete(false)
+            return
+        }
+        _uiState.update { it.copy(isJoiningRoom = true) }
         viewModelScope.launch {
             try {
                 val authenticatedPlayer = ensureFirebasePlayerIdentity()
@@ -148,18 +173,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (room != null) {
                     val me = authenticatedPlayer.copy(catchCode = if (authenticatedPlayer.role == Role.HIDER) RandomCode.generateNumericCode(4) else "")
                     if (firebaseSync.joinPlayer(upper, me)) {
-                        _uiState.update { it.copy(session = room.session, players = room.players.values.toList(), myPlayer = me, isOrganizer = room.session.hostPlayerId == me.id) }
+                        _uiState.update { it.copy(session = room.session, players = room.players.values.toList(), myPlayer = me, isOrganizer = room.session.hostPlayerId == me.id, isJoiningRoom = false, currentDynamicRadiusMeters = room.session.currentDynamicZoneRadiusMeters, toastMessage = "Joined ${room.session.roomName}!" ) }
                         onComplete(true)
                     } else {
-                        _uiState.update { it.copy(toastMessage = "Couldn't join room. Check your connection and Firebase database rules.") }
+                        _uiState.update { it.copy(isJoiningRoom = false, toastMessage = "Couldn't join room. Check your connection and Firebase database rules.") }
                         onComplete(false)
                     }
                 } else {
-                    _uiState.update { it.copy(toastMessage = "Room $upper not found or unreachable") }
+                    _uiState.update { it.copy(isJoiningRoom = false, toastMessage = "Room $upper not found or unreachable") }
                     onComplete(false)
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(toastMessage = "Firebase sign-in failed. Check your connection and Anonymous Authentication settings.") }
+                _uiState.update { it.copy(isJoiningRoom = false, toastMessage = "Couldn't join room. Check your connection and Firebase Anonymous Authentication settings.") }
                 onComplete(false)
             }
         }
@@ -187,9 +212,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startGame() {
         val s = _uiState.value.session ?: return
-        if (!_uiState.value.isOrganizer) return
+        if (!_uiState.value.isOrganizer || s.status == GameStatus.FINISHED) return
+        val runningSession = s.copy(status = GameStatus.RUNNING, isPaused = false, remainingSeconds = s.durationMinutes * 60, headStartRemainingSeconds = s.headStartMinutes * 60, currentDynamicZoneRadiusMeters = s.zoneRadiusMeters, isAutoPingActive = false, autoPingRemainingSeconds = 0)
+        _uiState.update { it.copy(session = runningSession, headStartCountdownSeconds = runningSession.headStartRemainingSeconds, currentDynamicRadiusMeters = runningSession.zoneRadiusMeters, isShrinkingZoneActive = false, isAutoPingActive = false, autoPingCountdownSeconds = 0) }
         viewModelScope.launch {
-            firebaseSync.updateSession(s.joinCode, mapOf("status" to GameStatus.RUNNING.name, "remainingSeconds" to s.durationMinutes * 60, "headStartRemainingSeconds" to s.headStartMinutes * 60))
+            firebaseSync.updateSession(s.joinCode, mapOf("status" to GameStatus.RUNNING.name, "isPaused" to false, "remainingSeconds" to s.durationMinutes * 60, "headStartRemainingSeconds" to s.headStartMinutes * 60, "currentDynamicZoneRadiusMeters" to s.zoneRadiusMeters, "isAutoPingActive" to false, "autoPingRemainingSeconds" to 0))
         }
         startCountdown()
     }
@@ -198,25 +225,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val s = _uiState.value.session ?: return
         if (!_uiState.value.isOrganizer) return
         val paused = !s.isPaused
+        _uiState.update { state -> state.copy(session = state.session?.copy(isPaused = paused, status = if (paused) GameStatus.PAUSED else GameStatus.RUNNING)) }
         viewModelScope.launch { firebaseSync.updateSession(s.joinCode, mapOf("isPaused" to paused, "status" to if (paused) GameStatus.PAUSED.name else GameStatus.RUNNING.name)) }
     }
 
     fun attemptCatch(targetHiderId: String, enteredCode: String, onResult: (Boolean, String) -> Unit) {
         val target = _uiState.value.players.find { it.id == targetHiderId }
-        if (target == null) { onResult(false, "Not found"); return }
+        if (target == null || target.role != Role.HIDER || target.isCaught) { onResult(false, "Hider not available"); return }
         if (target.isInSafeZone) { onResult(false, "Safe zone"); return }
+        if (target.immunityUntilEpochMs > System.currentTimeMillis()) { onResult(false, "Temporary immunity"); return }
         val me = _uiState.value.myPlayer
+        if (me.role != Role.SEEKER) { onResult(false, "Only Seekers can catch Hiders"); return }
+        val s = _uiState.value.session ?: return
+        if (s.status != GameStatus.RUNNING || s.isPaused || (s.headStartRemainingSeconds > 0 && me.role == Role.SEEKER)) { onResult(false, "Catch unavailable right now"); return }
         val dist = GeoUtils.distanceMeters(me.latitude, me.longitude, target.latitude, target.longitude)
         if (dist > Constants.CATCH_PROXIMITY_METERS) { onResult(false, "Too far ${dist.toInt()}m"); return }
-        val s = _uiState.value.session ?: return
-        viewModelScope.launch { firebaseSync.sendCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim())) }
+        viewModelScope.launch {
+            val submitted = firebaseSync.sendCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim()))
+            if (!submitted) _uiState.update { it.copy(toastMessage = "Catch attempt could not sync. Check your connection.") }
+        }
         if (target.catchCode.trim() == enteredCode.trim()) {
             hapticManager.triggerCatchConfirmation()
-            viewModelScope.launch {
-                val useJail = s.jailEnabled && s.jailLat != 0.0
-                firebaseSync.joinPlayer(s.joinCode, target.copy(isCaught = true, isInJail = useJail, isStealthActive = false))
-            }
-            onResult(true, "Caught")
+            onResult(true, "Catch submitted for confirmation")
         } else onResult(false, "Wrong code")
     }
 
@@ -319,61 +349,168 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleDarkMode() { _uiState.update { it.copy(isDarkMode = !it.isDarkMode) } }
+    fun refreshBatteryOptimizationStatus() {
+        val app = getApplication<Application>()
+        _uiState.update { it.copy(isBatteryOptimizationExempt = BatteryOptimizationHelper.isBatteryOptimizationDisabled(app)) }
+    }
+
     fun leaveGame() {
         countdownTimerJob?.cancel()
         if (jailbreakJob?.isActive == true) {
             jailbreakJob?.cancel()
             _uiState.value.session?.joinCode?.let { code -> viewModelScope.launch { resetJailbreak(code) } }
         }
-        _uiState.update { it.copy(session = null, players = emptyList(), isOrganizer = false) }
+        val session = _uiState.value.session
+        val playerId = _uiState.value.myPlayer.id
+        if (session != null) viewModelScope.launch { firebaseSync.leaveRoom(session.joinCode, playerId) } else firebaseSync.stopSync()
+        _uiState.update { it.copy(session = null, players = emptyList(), isOrganizer = false, isJoiningRoom = false, isCreatingRoom = false, pendingCatchConfirm = null, canJailbreak = false, isInJail = false) }
     }
     fun leaveRoom() = leaveGame()
     fun clearToast() { _uiState.update { it.copy(toastMessage = null) } }
     fun dismissToast() = clearToast()
 
     private fun applyRoom(room: RoomNetworkModel) {
-        val me = room.players[_uiState.value.myPlayer.id] ?: _uiState.value.myPlayer
+        val state = _uiState.value
+        val me = room.players[state.myPlayer.id] ?: state.myPlayer
+        val session = room.session
+        val now = System.currentTimeMillis()
+        val isStealthActive = me.isStealthActive && now < me.stealthUntilEpochMs
+        val canJailbreak = session.jailEnabled && me.role == Role.HIDER && !me.isCaught && !me.isInJail &&
+            session.status == GameStatus.RUNNING &&
+            GeoUtils.distanceMeters(me.latitude, me.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters &&
+            room.players.values.any { it.role == Role.HIDER && it.isInJail }
+        val huntersNearJail = room.players.values.filter { player ->
+            player.role == Role.SEEKER && player.latitude != 0.0 &&
+                GeoUtils.distanceMeters(player.latitude, player.longitude, session.jailLat, session.jailLng) <= session.jailRadiusMeters * 2
+        }
         _uiState.update {
             it.copy(
-                session = room.session,
+                session = session,
                 players = room.players.values.toList(),
                 myPlayer = me,
-                isSeekerFrozen = me.role == Role.SEEKER && room.session.status == GameStatus.RUNNING && room.session.headStartRemainingSeconds > 0,
-                headStartCountdownSeconds = room.session.headStartRemainingSeconds,
-                currentDynamicRadiusMeters = room.session.currentDynamicZoneRadiusMeters,
-                isAutoPingActive = room.session.isAutoPingActive,
-                autoPingCountdownSeconds = room.session.autoPingRemainingSeconds,
-                isStealthActive = me.isStealthActive && System.currentTimeMillis() < me.stealthUntilEpochMs,
+                isSeekerFrozen = me.role == Role.SEEKER && session.status == GameStatus.RUNNING && session.headStartRemainingSeconds > 0,
+                headStartCountdownSeconds = session.headStartRemainingSeconds,
+                currentDynamicRadiusMeters = session.currentDynamicZoneRadiusMeters,
+                isShrinkingZoneActive = session.isShrinkingZoneEnabled && !session.isUnlimitedZone && session.currentDynamicZoneRadiusMeters < session.zoneRadiusMeters,
+                isAutoPingActive = session.isAutoPingActive,
+                autoPingCountdownSeconds = session.autoPingRemainingSeconds,
+                isStealthActive = isStealthActive,
+                stealthCooldownSeconds = (((me.stealthCooldownUntilEpochMs - now).coerceAtLeast(0L) + 999L) / 1000L).toInt(),
                 isInJail = me.isInJail,
+                canJailbreak = canJailbreak,
+                jailbreakHoldProgress = session.jailbreakProgressSeconds,
+                huntersNearJail = huntersNearJail,
                 pendingCatchConfirm = room.pendingCatchConfirm
             )
+        }
+        recalculateDistancesAndProximity()
+        val attempt = room.lastCatchAttempt
+        if (state.isOrganizer && attempt != null && attempt.timestamp > lastHandledCatchAttemptTimestamp) {
+            lastHandledCatchAttemptTimestamp = attempt.timestamp
+            processCatchAttempt(attempt)
         }
     }
 
     private fun handleLocation(lat: Double, lng: Double) {
-        val s = _uiState.value.session
-        val me = _uiState.value.myPlayer.copy(latitude = lat, longitude = lng, lastUpdatedEpochMs = System.currentTimeMillis())
-        _uiState.update { it.copy(myPlayer = me) }
-        if (s != null && s.status == GameStatus.RUNNING) {
-            viewModelScope.launch { firebaseSync.updateLocation(s.joinCode, me.id, lat, lng, false) }
-            if (me.role == Role.HIDER) {
-                val seekers = _uiState.value.players.filter { it.role == Role.SEEKER }
-                var best = Double.MAX_VALUE
-                for (sk in seekers) {
-                    if (sk.latitude == 0.0) continue
-                    val d = GeoUtils.distanceMeters(lat, lng, sk.latitude, sk.longitude)
-                    if (d < best) best = d
+        val session = _uiState.value.session
+        val radius = session?.currentDynamicZoneRadiusMeters?.takeIf { it > 0.0 }
+            ?: session?.zoneRadiusMeters ?: 1000.0
+        val unlimited = session?.isUnlimitedZone ?: false
+        val geofence = if (session != null && radius > 0.0 && session.zoneCenterLat != 0.0 && !unlimited) {
+            GeofenceManager.evaluate(lat, lng, session.zoneCenterLat, session.zoneCenterLng, radius)
+        } else {
+            com.manhunt.app.util.GeofenceEvaluation(GeofenceStatus.INSIDE, 0.0, 0.0, false)
+        }
+        val safeZone = session?.safeZones?.firstOrNull { zone ->
+            GeoUtils.distanceMeters(lat, lng, zone.latitude, zone.longitude) <= zone.radiusMeters
+        }
+        val now = System.currentTimeMillis()
+        val previousMe = _uiState.value.myPlayer
+        val me = previousMe.copy(
+            latitude = lat,
+            longitude = lng,
+            isOutOfZone = geofence.isOutside,
+            isInSafeZone = safeZone != null,
+            safeZoneName = safeZone?.name,
+            lastUpdatedEpochMs = now
+        )
+        _uiState.update {
+            it.copy(
+                myPlayer = me,
+                isOutOfZone = geofence.isOutside,
+                geofenceStatus = geofence.status,
+                geofenceMessage = geofence.warningMessage,
+                isInSafeZone = safeZone != null,
+                currentSafeZoneName = safeZone?.name
+            )
+        }
+        val seekerFrozen = me.role == Role.SEEKER && (session?.headStartRemainingSeconds ?: 0) > 0
+        if (!seekerFrozen && session != null && session.status == GameStatus.RUNNING && session.joinCode.isNotEmpty()) {
+            viewModelScope.launch { firebaseSync.updateLocation(session.joinCode, me.id, lat, lng, geofence.isOutside) }
+        }
+        if (session != null && session.joinCode.isNotEmpty() &&
+            (previousMe.isInSafeZone != me.isInSafeZone || previousMe.safeZoneName != me.safeZoneName)) {
+            viewModelScope.launch {
+                firebaseSync.patchPlayer(session.joinCode, me.id, mapOf(
+                    "isInSafeZone" to me.isInSafeZone,
+                    "safeZoneName" to (me.safeZoneName ?: "")
+                ))
+            }
+        }
+        recalculateDistancesAndProximity()
+    }
+
+    private fun recalculateDistancesAndProximity() {
+        val state = _uiState.value
+        val me = state.myPlayer
+        val others = state.players.filter { it.id != me.id }
+        if (me.role == Role.HIDER) {
+            var nearest = Double.MAX_VALUE
+            var bearing = 0f
+            others.filter { it.role == Role.SEEKER && it.latitude != 0.0 && it.longitude != 0.0 }.forEach { seeker ->
+                val distance = GeoUtils.distanceMeters(me.latitude, me.longitude, seeker.latitude, seeker.longitude)
+                if (distance < nearest) {
+                    nearest = distance
+                    bearing = GeoUtils.bearingDegrees(me.latitude, me.longitude, seeker.latitude, seeker.longitude)
                 }
-                if (best < Double.MAX_VALUE) {
-                    hapticManager.evaluateProximityHaptics(best)
-                    _uiState.update { it.copy(nearestSeekerDistance = best) }
+            }
+            val distance = if (nearest == Double.MAX_VALUE) -1.0 else nearest
+            if (distance >= 0.0) hapticManager.evaluateProximityHaptics(distance)
+            _uiState.update { it.copy(nearestSeekerDistance = distance, nearestSeekerBearing = bearing, nearbyCatchableHider = null) }
+        } else {
+            val hiders = others.filter { it.role == Role.HIDER && !it.isCaught }
+            val catchable = hiders.firstOrNull { hider ->
+                !hider.isInSafeZone && hider.immunityUntilEpochMs <= System.currentTimeMillis() &&
+                    hider.latitude != 0.0 && hider.longitude != 0.0 &&
+                    GeoUtils.distanceMeters(me.latitude, me.longitude, hider.latitude, hider.longitude) <= Constants.CATCH_PROXIMITY_METERS
+            }
+            val protected = hiders.firstOrNull { it.isInSafeZone }
+            _uiState.update {
+                it.copy(nearbyCatchableHider = catchable, safeZoneNotice = protected?.let { h -> "${h.name} is protected in ${h.safeZoneName?.takeIf { it.isNotBlank() } ?: "Safe Zone"}!" })
+            }
+        }
+    }
+
+    private fun processCatchAttempt(attempt: CatchAttemptPayload) {
+        val state = _uiState.value
+        val session = state.session ?: return
+        if (!state.isOrganizer || session.status != GameStatus.RUNNING || session.isPaused) return
+        val seeker = state.players.firstOrNull { it.id == attempt.seekerId } ?: return
+        val target = state.players.firstOrNull { it.id == attempt.targetHiderId } ?: return
+        if (seeker.role != Role.SEEKER || target.role != Role.HIDER || target.isCaught || target.isInSafeZone) return
+        if (target.immunityUntilEpochMs > System.currentTimeMillis()) return
+        if (seeker.id == target.id || seeker.id != attempt.seekerId) return
+        val distance = GeoUtils.distanceMeters(seeker.latitude, seeker.longitude, target.latitude, target.longitude)
+        if (distance > Constants.CATCH_PROXIMITY_METERS || target.catchCode.trim() != attempt.enteredCode.trim()) return
+        val sendToJail = session.jailEnabled && session.jailLat != 0.0
+        val caught = target.copy(isCaught = true, isInJail = sendToJail, isStealthActive = false)
+        viewModelScope.launch {
+            if (firebaseSync.joinPlayer(session.joinCode, caught)) {
+                _uiState.update { current ->
+                    current.copy(players = current.players.map { player -> if (player.id == target.id) caught else player })
                 }
-            } else {
-                val catchable = _uiState.value.players.firstOrNull {
-                    it.role == Role.HIDER && !it.isCaught && !it.isInSafeZone &&
-                        GeoUtils.distanceMeters(lat, lng, it.latitude, it.longitude) <= Constants.CATCH_PROXIMITY_METERS
-                }
-                _uiState.update { it.copy(nearbyCatchableHider = catchable) }
+                val remainingHiders = state.players.filter { it.role == Role.HIDER && it.id != target.id && !it.isCaught }
+                if (remainingHiders.isEmpty()) endGame(Role.SEEKER)
             }
         }
     }
@@ -381,24 +518,64 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private fun startCountdown() {
         countdownTimerJob?.cancel()
         countdownTimerJob = viewModelScope.launch {
+            var remaining = _uiState.value.session?.remainingSeconds ?: 0
+            var headStart = _uiState.value.session?.headStartRemainingSeconds ?: 0
             while (isActive) {
                 delay(1000)
-                val s = _uiState.value.session ?: break
-                if (s.status != GameStatus.RUNNING || s.isPaused || !_uiState.value.isOrganizer) continue
-                val remaining = s.remainingSeconds - 1
-                var head = s.headStartRemainingSeconds
-                if (head > 0) {
-                    head--
-                    if (head == 0) hapticManager.triggerHeadStartOver()
+                val current = _uiState.value.session ?: break
+                if (current.status != GameStatus.RUNNING || current.isPaused || !_uiState.value.isOrganizer) continue
+                remaining = (remaining - 1).coerceAtLeast(0)
+                if (headStart > 0) {
+                    headStart--
+                    if (headStart == 0) hapticManager.triggerHeadStartOver()
+                }
+                val totalSeconds = current.durationMinutes * 60
+                var dynamicRadius = current.zoneRadiusMeters
+                var shrinking = false
+                if (current.isShrinkingZoneEnabled && !current.isUnlimitedZone) {
+                    val threshold = (totalSeconds * 0.25).toInt()
+                    if (threshold > 0 && remaining <= threshold) {
+                        shrinking = true
+                        val progress = remaining.toDouble() / threshold.toDouble()
+                        dynamicRadius = maxOf(100.0, 100.0 + (current.zoneRadiusMeters - 100.0) * progress)
+                    }
+                }
+                var pingActive = false
+                var pingRemaining = 0
+                if (current.autoPingIntervalMinutes > 0) {
+                    val interval = current.autoPingIntervalMinutes * 60
+                    val elapsed = totalSeconds - remaining
+                    if (elapsed > 0) {
+                        val cycle = elapsed % interval
+                        if (cycle in 0..9) {
+                            pingActive = true
+                            pingRemaining = 10 - cycle
+                        }
+                    }
                 }
                 if (remaining <= 0) {
                     endGame(Role.HIDER)
                     break
                 }
-                if (remaining % 3 == 0 || head in 1..5) {
-                    firebaseSync.updateSession(s.joinCode, mapOf("remainingSeconds" to remaining, "headStartRemainingSeconds" to head))
+                _uiState.update { state ->
+                    state.copy(
+                        session = state.session?.copy(remainingSeconds = remaining, headStartRemainingSeconds = headStart, currentDynamicZoneRadiusMeters = dynamicRadius, isAutoPingActive = pingActive, autoPingRemainingSeconds = pingRemaining),
+                        headStartCountdownSeconds = headStart,
+                        isShrinkingZoneActive = shrinking,
+                        currentDynamicRadiusMeters = dynamicRadius,
+                        isAutoPingActive = pingActive,
+                        autoPingCountdownSeconds = pingRemaining
+                    )
                 }
-                _uiState.update { it.copy(headStartCountdownSeconds = head) }
+                if (remaining % 3 == 0 || headStart in 1..5 || pingActive) {
+                    firebaseSync.updateSession(current.joinCode, mapOf(
+                        "remainingSeconds" to remaining,
+                        "headStartRemainingSeconds" to headStart,
+                        "currentDynamicZoneRadiusMeters" to dynamicRadius,
+                        "isAutoPingActive" to pingActive,
+                        "autoPingRemainingSeconds" to pingRemaining
+                    ))
+                }
             }
         }
     }
