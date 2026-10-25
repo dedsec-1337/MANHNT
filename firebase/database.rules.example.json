@@ -1,0 +1,29 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$joinCode": {
+        ".read": "auth != null",
+        ".write": "auth != null && !data.exists() && newData.child('session').child('hostPlayerId').val() === auth.uid",
+        "session": {
+          ".write": "auth != null && data.child('hostPlayerId').val() === auth.uid && newData.child('hostPlayerId').val() === auth.uid",
+          ".validate": "newData.hasChildren(['joinCode', 'roomName', 'status', 'hostPlayerId']) && newData.child('joinCode').val() === $joinCode && newData.child('hostPlayerId').isString()"
+        },
+        "players": {
+          "$playerId": {
+            ".write": "auth != null && ($playerId === auth.uid || root.child('rooms').child($joinCode).child('session').child('hostPlayerId').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['id', 'name', 'role']) && newData.child('id').val() === $playerId"
+          }
+        },
+        "lastCatchAttempt": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['seekerId', 'targetHiderId', 'enteredCode', 'timestamp'])"
+        },
+        "pendingCatchConfirm": {
+          ".write": "auth != null"
+        }
+      }
+    }
+  }
+}
