@@ -258,7 +258,7 @@
         ".read": "auth != null && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).exists()",
         "$playerId": {
           ".write": "auth != null && $playerId === auth.uid && root.child('rooms').child($joinCode).child('publicPlayers').child(auth.uid).exists() && (!newData.exists() || (root.child('rooms').child($joinCode).child('session').child('status').val() === 'RUNNING' && root.child('rooms').child($joinCode).child('session').child('isPaused').val() !== true))",
-          ".validate": "newData.hasChildren(['code', 'timestampEpochMs']) && newData.numChildren() === 2",
+          ".validate": "newData.hasChildren(['code', 'timestampEpochMs'])",
           "code": {
             ".validate": "newData.isString() && (newData.val() === 'R_LAUGH' || newData.val() === 'R_EYES' || newData.val() === 'R_CLAP' || newData.val() === 'R_FIRE' || newData.val() === 'P_CATCH_ME' || newData.val() === 'P_CLOSE_CALL' || newData.val() === 'P_WARMER' || newData.val() === 'P_NEED_RESCUE' || newData.val() === 'P_GG')"
           },
