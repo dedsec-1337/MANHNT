@@ -124,12 +124,8 @@ object GameSignalCode {
     const val PHRASE_NEED_RESCUE = "P_NEED_RESCUE"
     const val PHRASE_GG = "P_GG"
 
-    const val MAX_AGE_MS = 15_000L
-    const val MAX_FUTURE_SKEW_MS = 5_000L
-    const val SEND_COOLDOWN_MS = 1_500L
-
     val allowedCodes = setOf(
         REACTION_LAUGH, REACTION_EYES, REACTION_CLAP, REACTION_FIRE,
         PHRASE_CATCH_ME, PHRASE_CLOSE_CALL, PHRASE_WARMER, PHRASE_NEED_RESCUE, PHRASE_GG
     )
-)
+}
