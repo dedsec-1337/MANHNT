@@ -101,183 +101,154 @@ fun OSMMapView(
         }
     }
 
+    val overlayContent = remember(
+        playerLat, playerLng, userRole, zoneCenterLat, zoneCenterLng, zoneRadiusMeters,
+        isUnlimitedZone, safeZones, isAutoPingActive, otherPlayers, jailLat, jailLng,
+        jailRadiusMeters, jailEnabled, hasHeading, playerLocationUpdatedAtEpochMs,
+        showOtherPlayerLocations
+    ) {
+        MapOverlayContent(
+            playerLat = playerLat,
+            playerLng = playerLng,
+            userRole = userRole,
+            zoneCenterLat = zoneCenterLat,
+            zoneCenterLng = zoneCenterLng,
+            zoneRadiusMeters = zoneRadiusMeters,
+            isUnlimitedZone = isUnlimitedZone,
+            safeZones = safeZones,
+            isAutoPingActive = isAutoPingActive,
+            otherPlayers = otherPlayers,
+            jailLat = jailLat,
+            jailLng = jailLng,
+            jailRadiusMeters = jailRadiusMeters,
+            jailEnabled = jailEnabled,
+            hasHeading = hasHeading,
+            playerLocationUpdatedAtEpochMs = playerLocationUpdatedAtEpochMs,
+            playerLocationIsRecent = GeoUtils.isLocationRecent(playerLocationUpdatedAtEpochMs),
+            otherPlayerLocationFreshness = otherPlayers.map {
+                it.id to GeoUtils.isLocationRecent(it.lastUpdatedEpochMs)
+            },
+            // Show last-known positions even when GPS is briefly stale.
+            visibleOtherPlayerIds = otherPlayers.asSequence()
+                .filter { it.role == Role.HIDER && !it.isCaught }
+                .filterNot { it.isStealthActive && System.currentTimeMillis() < it.stealthUntilEpochMs }
+                .map { it.id }
+                .toSet(),
+            showOtherPlayerLocations = showOtherPlayerLocations
+        )
+    }
+
     AndroidView(
         modifier = modifier.fillMaxSize(),
         factory = { ctx ->
             MapView(ctx).apply {
                 setTileSource(TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
-                isTilesScaledToDpi = true
                 zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                 controller.setZoom(initialZoom)
-                val hasPlayerFix = centerOnPlayer && GeoUtils.hasValidCoordinates(playerLat, playerLng)
-                val initialCenter = when {
-                    hasPlayerFix -> GeoPoint(playerLat, playerLng)
-                    GeoUtils.hasValidCoordinates(zoneCenterLat, zoneCenterLng) -> GeoPoint(zoneCenterLat, zoneCenterLng)
-                    else -> GeoPoint(0.0, 0.0)
+                if (GeoUtils.hasValidCoordinates(zoneCenterLat, zoneCenterLng)) {
+                    controller.setCenter(GeoPoint(zoneCenterLat, zoneCenterLng))
                 }
-                controller.setCenter(initialCenter)
-                hasCenteredOnPlayer[0] = hasPlayerFix
-                onResume()
                 mapViewRef = this
             }
         },
         update = { mapView ->
-            if (centerOnPlayer && !hasCenteredOnPlayer[0] &&
-                playerLocationUpdatedAtEpochMs > lastCenteredLocationTimestamp[0] &&
-                GeoUtils.hasValidCoordinates(playerLat, playerLng)
-            ) {
-                mapView.controller.setCenter(GeoPoint(playerLat, playerLng))
-                hasCenteredOnPlayer[0] = true
-            }
-            lastCenteredLocationTimestamp[0] = maxOf(
-                lastCenteredLocationTimestamp[0],
-                playerLocationUpdatedAtEpochMs
-            )
-
-            // Show last-known positions even if the fix is a bit old — players need the map to hunt.
-            val visibleIds = otherPlayers.asSequence()
-                .filter { it.role == Role.HIDER && !it.isCaught }
-                .filter { GeoUtils.hasValidCoordinates(it.latitude, it.longitude) }
-                .filterNot { it.isStealthActive && System.currentTimeMillis() < it.stealthUntilEpochMs }
-                .map { it.id }
-                .toSet()
-
-            val overlayContent = MapOverlayContent(
-                playerLat = playerLat,
-                playerLng = playerLng,
-                userRole = userRole,
-                zoneCenterLat = zoneCenterLat,
-                zoneCenterLng = zoneCenterLng,
-                zoneRadiusMeters = zoneRadiusMeters,
-                isUnlimitedZone = isUnlimitedZone,
-                safeZones = safeZones.toList(),
-                isAutoPingActive = isAutoPingActive,
-                otherPlayers = otherPlayers.toList(),
-                jailLat = jailLat,
-                jailLng = jailLng,
-                jailRadiusMeters = jailRadiusMeters,
-                jailEnabled = jailEnabled,
-                hasHeading = hasHeading,
-                playerLocationUpdatedAtEpochMs = playerLocationUpdatedAtEpochMs,
-                playerLocationIsRecent = GeoUtils.isLocationRecent(playerLocationUpdatedAtEpochMs),
-                otherPlayerLocationFreshness = otherPlayers.map {
-                    it.id to GeoUtils.isLocationRecent(it.lastUpdatedEpochMs)
-                },
-                visibleOtherPlayerIds = visibleIds,
-                showOtherPlayerLocations = showOtherPlayerLocations
-            )
-            val overlaysChanged = mapRenderState.overlayContent != overlayContent
+            val previous = mapRenderState.overlayContent
+            val overlaysChanged = previous != overlayContent
             val headingChanged = mapRenderState.headingDegrees != headingDegrees
+
+            if (centerOnPlayer && GeoUtils.hasValidCoordinates(playerLat, playerLng)) {
+                val movedEnough = kotlin.math.abs(playerLocationUpdatedAtEpochMs - lastCenteredLocationTimestamp[0]) > 2000L
+                if (!hasCenteredOnPlayer[0] || movedEnough) {
+                    mapView.controller.animateTo(GeoPoint(playerLat, playerLng))
+                    hasCenteredOnPlayer[0] = true
+                    lastCenteredLocationTimestamp[0] = playerLocationUpdatedAtEpochMs
+                }
+            }
 
             if (overlaysChanged) {
                 mapView.overlays.clear()
-                mapRenderState.playerMarker = null
 
-                if (!isUnlimitedZone && zoneRadiusMeters > 0 &&
-                    GeoUtils.hasValidCoordinates(zoneCenterLat, zoneCenterLng)
-                ) {
-                    val circleCenter = GeoPoint(zoneCenterLat, zoneCenterLng)
-                    val circlePolygon = Polygon(mapView).apply {
-                        points = Polygon.pointsAsCircle(circleCenter, zoneRadiusMeters)
-                        fillPaint.color = AndroidColor.argb(25, 0, 122, 255)
-                        fillPaint.style = Paint.Style.FILL
-                        outlinePaint.color = AndroidColor.argb(200, 0, 122, 255)
-                        outlinePaint.strokeWidth = 6f
+                if (!isUnlimitedZone && zoneRadiusMeters > 0 && GeoUtils.hasValidCoordinates(zoneCenterLat, zoneCenterLng)) {
+                    val zone = Polygon(mapView).apply {
+                        points = Polygon.pointsAsCircle(GeoPoint(zoneCenterLat, zoneCenterLng), zoneRadiusMeters)
+                        fillPaint.color = AndroidColor.argb(40, 0, 122, 255)
+                        outlinePaint.color = AndroidColor.argb(180, 0, 122, 255)
+                        outlinePaint.strokeWidth = 4f
                         outlinePaint.style = Paint.Style.STROKE
-                        title = "Play Zone Perimeter (${zoneRadiusMeters.toInt()}m)"
                     }
-                    mapView.overlays.add(circlePolygon)
-                    if (zoneRadiusMeters > 50) {
-                        val bufferPolygon = Polygon(mapView).apply {
-                            points = Polygon.pointsAsCircle(circleCenter, zoneRadiusMeters - 25.0)
-                            fillPaint.color = AndroidColor.TRANSPARENT
-                            outlinePaint.color = AndroidColor.argb(120, 255, 149, 0)
-                            outlinePaint.strokeWidth = 3f
-                            outlinePaint.style = Paint.Style.STROKE
-                        }
-                        mapView.overlays.add(bufferPolygon)
-                    }
+                    mapView.overlays.add(zone)
                 }
 
-                for (safeZone in safeZones) {
-                    if (GeoUtils.hasValidCoordinates(safeZone.latitude, safeZone.longitude)) {
-                        val safeCenter = GeoPoint(safeZone.latitude, safeZone.longitude)
-                        val safePolygon = Polygon(mapView).apply {
-                            points = Polygon.pointsAsCircle(safeCenter, safeZone.radiusMeters)
-                            fillPaint.color = AndroidColor.argb(45, 52, 199, 89)
-                            fillPaint.style = Paint.Style.FILL
-                            outlinePaint.color = AndroidColor.argb(220, 52, 199, 89)
-                            outlinePaint.strokeWidth = 4f
+                for (safe in safeZones) {
+                    if (GeoUtils.hasValidCoordinates(safe.latitude, safe.longitude) && safe.radiusMeters > 0) {
+                        val poly = Polygon(mapView).apply {
+                            points = Polygon.pointsAsCircle(GeoPoint(safe.latitude, safe.longitude), safe.radiusMeters)
+                            fillPaint.color = AndroidColor.argb(50, 52, 199, 89)
+                            outlinePaint.color = AndroidColor.argb(200, 52, 199, 89)
+                            outlinePaint.strokeWidth = 3f
                             outlinePaint.style = Paint.Style.STROKE
-                            title = "🛡️ ${safeZone.name} (Safe Zone)"
+                            title = safe.name
                         }
-                        mapView.overlays.add(safePolygon)
+                        mapView.overlays.add(poly)
                     }
                 }
 
                 if (jailEnabled && GeoUtils.hasValidCoordinates(jailLat, jailLng)) {
-                    val jailCenter = GeoPoint(jailLat, jailLng)
-                    val jailPolygon = Polygon(mapView).apply {
-                        points = Polygon.pointsAsCircle(jailCenter, jailRadiusMeters)
-                        fillPaint.color = AndroidColor.argb(55, 255, 59, 48)
-                        fillPaint.style = Paint.Style.FILL
-                        outlinePaint.color = AndroidColor.argb(230, 255, 59, 48)
-                        outlinePaint.strokeWidth = 5f
+                    val jail = Polygon(mapView).apply {
+                        points = Polygon.pointsAsCircle(GeoPoint(jailLat, jailLng), jailRadiusMeters)
+                        fillPaint.color = AndroidColor.argb(50, 255, 59, 48)
+                        outlinePaint.color = AndroidColor.argb(200, 255, 59, 48)
+                        outlinePaint.strokeWidth = 3f
                         outlinePaint.style = Paint.Style.STROKE
-                        title = "🔒 Jail"
+                        title = "Jail"
                     }
-                    mapView.overlays.add(jailPolygon)
+                    mapView.overlays.add(jail)
                 }
 
-                // Always show self when we have any coordinates (last known is fine).
                 if (GeoUtils.hasValidCoordinates(playerLat, playerLng)) {
                     val selfMarker = Marker(mapView).apply {
                         position = GeoPoint(playerLat, playerLng)
-                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                        title = if (overlayContent.playerLocationIsRecent) "You" else "You (last known)"
-                        icon = context.getDrawable(
-                            if (hasHeading) R.drawable.ic_player_heading else android.R.drawable.presence_online
-                        )
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                        title = "You"
+                        icon = context.getDrawable(android.R.drawable.ic_menu_mylocation)
+                        if (hasHeading) setRotation(-headingDegrees)
                     }
                     mapView.overlays.add(selfMarker)
                     mapRenderState.playerMarker = selfMarker
                 }
 
-                // Seekers (and auto-ping) see Hider last-known pins so the map is usable.
                 if (showOtherPlayerLocations && (userRole == Role.SEEKER || isAutoPingActive)) {
                     for (hider in otherPlayers.filter { it.id in overlayContent.visibleOtherPlayerIds }) {
                         if (GeoUtils.hasValidCoordinates(hider.latitude, hider.longitude)) {
-                            val fresh = GeoUtils.isLocationRecent(hider.lastUpdatedEpochMs)
                             val hiderMarker = Marker(mapView).apply {
                                 position = GeoPoint(hider.latitude, hider.longitude)
-                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                                 title = when {
-                                    hider.isInSafeZone -> "${hider.name} 🛡️ (Safe)"
-                                    fresh -> "${hider.name} (Hider)"
-                                    else -> "${hider.name} (last known)"
+                                    hider.isInSafeZone -> "${hider.name} (Safe)"
+                                    else -> "${hider.name} (Hider)"
                                 }
-                                snippet = if (fresh) "Live" else "Last known position"
                                 icon = context.getDrawable(
                                     if (hider.isInSafeZone) android.R.drawable.presence_invisible
-                                    else android.R.drawable.ic_menu_mylocation
+                                    else android.R.drawable.presence_away
                                 )
                             }
                             mapView.overlays.add(hiderMarker)
                         }
                     }
                     val jailed = otherPlayers.filter {
-                        it.role == Role.HIDER && it.isInJail &&
-                            GeoUtils.hasValidCoordinates(it.latitude, it.longitude)
+                        it.role == Role.HIDER && it.isInJail
                     }
                     for (j in jailed) {
-                        val m = Marker(mapView).apply {
-                            position = GeoPoint(j.latitude, j.longitude)
-                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            title = "${j.name} 🔒 Jail"
-                            icon = context.getDrawable(android.R.drawable.ic_lock_lock)
+                        if (GeoUtils.hasValidCoordinates(j.latitude, j.longitude)) {
+                            val m = Marker(mapView).apply {
+                                position = GeoPoint(j.latitude, j.longitude)
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                                title = "${j.name} Jail"
+                                icon = context.getDrawable(android.R.drawable.ic_lock_lock)
+                            }
+                            mapView.overlays.add(m)
                         }
-                        mapView.overlays.add(m)
                     }
                 }
 
