@@ -1015,7 +1015,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     GeoUtils.hasValidCoordinates(zone.latitude, zone.longitude) &&
                         GeoUtils.distanceMeters(target.latitude, target.longitude, zone.latitude, zone.longitude) <= zone.radiusMeters
                 }
-                val distance = GeoUtils.distanceMeters(seeker.latitude, seeker.longitude, target.latitude, target.longitude)
                 // Distance is not enforced — catch code is the real-world tag proof.
                 if (targetInSafeZone ||
                     target.catchCode.trim() != attempt.enteredCode.trim()
