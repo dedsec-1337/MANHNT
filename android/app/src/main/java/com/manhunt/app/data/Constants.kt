@@ -6,16 +6,16 @@ object Constants {
     const val LOCATION_UPDATE_INTERVAL_MS = 5000L
     const val FASTEST_LOCATION_INTERVAL_MS = 3000L
     const val CLOUD_SYNC_POLL_INTERVAL_MS = 2500L
-    const val MAX_LOCATION_AGE_MS = 20_000L
+    // Allow a bit more slack: write every 5s + poll every 2.5s + phone GPS jitter.
+    const val MAX_LOCATION_AGE_MS = 30_000L
     const val MAX_LOCATION_FUTURE_SKEW_MS = 5_000L
     const val GAME_SIGNAL_MAX_AGE_MS = 15_000L
     const val GAME_SIGNAL_MAX_FUTURE_SKEW_MS = 5_000L
     const val GAME_SIGNAL_SEND_COOLDOWN_MS = 1_500L
 
-    // Catch range must absorb the write/poll cadence: locations are written every 5s and the
-    // room is polled every 2.5s, so two players standing together can appear up to ~7.5s stale.
-    // GPS jitter on top of that makes 10m unusable, so allow 25m.
-    const val CATCH_PROXIMITY_METERS = 25.0
+    // Catch range must absorb write/poll lag and real-world GPS error (often 5–20m+).
+    // 25m felt unusable outdoors; 50m is still close-range tagging without being trivial.
+    const val CATCH_PROXIMITY_METERS = 50.0
 
     const val HEARTBEAT_FAR_METERS = 80.0
     const val HEARTBEAT_MID_METERS = 50.0
