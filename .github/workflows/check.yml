@@ -104,7 +104,23 @@ jobs:
           gradle-version: "8.6"
       - name: Compile Kotlin and assemble debug APK
         working-directory: android
-        run: gradle --no-daemon :app:compileDebugKotlin :app:assembleDebug
+        run: |
+          set -o pipefail
+          set +e
+          gradle --no-daemon :app:compileDebugKotlin :app:assembleDebug 2>&1 | tee compile.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo ""
+            echo "===== Kotlin / Android errors ====="
+            # Surface compiler lines in the job log and as annotations when possible
+            grep -E '^e: |^error: |Unresolved reference|Type mismatch|None of the following|Execution failed' compile.log | head -80 || true
+            while IFS= read -r line; do
+              echo "::error::$line"
+            done < <(grep -E '^e: ' compile.log | head -40 || true)
+            echo "================================="
+            exit "$status"
+          fi
 
   firebase-rules-tests:
     name: Firebase Realtime Database rules tests
