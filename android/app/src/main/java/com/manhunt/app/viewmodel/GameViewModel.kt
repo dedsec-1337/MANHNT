@@ -246,7 +246,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (me.role != Role.SEEKER) { onResult(false, "Only Seekers can catch Hiders"); return }
         val s = _uiState.value.session ?: return
         if (s.status != GameStatus.RUNNING || s.isPaused || (s.headStartRemainingSeconds > 0 && me.role == Role.SEEKER)) { onResult(false, "Catch unavailable right now"); return }
-        // No GPS / distance gate — catch code is the proof of a real-world tag.
         if (!enteredCode.trim().matches(Regex("^[0-9]{4}$"))) { onResult(false, "Enter the four-digit catch code"); return }
         viewModelScope.launch {
             val submitted = firebaseSync.sendCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim()))
@@ -375,12 +374,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAppearanceMode(mode: AppearanceMode) {
         settingsPreferences.edit().putString(PREFERENCE_APPEARANCE_MODE, mode.name).apply()
-        _uiState.update { it.copy(appearanceSettings = it.appearanceSettings.copy(appearanceMode = mode)) }
+        _uiState.update { it.copy(appearanceSettings = it.appearanceSettings.copy(mode = mode)) }
     }
 
     fun setAccentMode(mode: AccentMode) {
         settingsPreferences.edit().putString(PREFERENCE_ACCENT_MODE, mode.name).apply()
-        _uiState.update { it.copy(appearanceSettings = it.appearanceSettings.copy(accentMode = mode)) }
+        _uiState.update { it.copy(appearanceSettings = it.appearanceSettings.copy(accent = mode)) }
     }
 
     fun setHighRefreshRateEnabled(enabled: Boolean) {
@@ -393,12 +392,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun loadAppearanceSettings(): AppearanceSettings {
-        val appearance = settingsPreferences.getString(PREFERENCE_APPEARANCE_MODE, AppearanceMode.SYSTEM.name)
-            ?.let { runCatching { AppearanceMode.valueOf(it) }.getOrNull() } ?: AppearanceMode.SYSTEM
+        val appearance = settingsPreferences.getString(PREFERENCE_APPEARANCE_MODE, AppearanceMode.FOLLOW_DEVICE.name)
+            ?.let { runCatching { AppearanceMode.valueOf(it) }.getOrNull() } ?: AppearanceMode.FOLLOW_DEVICE
         val accent = settingsPreferences.getString(PREFERENCE_ACCENT_MODE, AccentMode.BLUE.name)
             ?.let { runCatching { AccentMode.valueOf(it) }.getOrNull() } ?: AccentMode.BLUE
         val highRefresh = settingsPreferences.getBoolean(PREFERENCE_HIGH_REFRESH_RATE, false)
-        return AppearanceSettings(appearanceMode = appearance, accentMode = accent, highRefreshRateEnabled = highRefresh)
+        return AppearanceSettings(mode = appearance, accent = accent, highRefreshRateEnabled = highRefresh)
     }
 
     fun sendQuickSignal(code: String) {
@@ -509,7 +508,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (attempt.timestamp <= lastHandledCatchAttemptTimestamp) return
         val target = _uiState.value.players.find { it.id == attempt.targetHiderId } ?: return
         val targetInSafeZone = target.isInSafeZone
-        // Distance is not enforced — catch code is the real-world tag proof.
         if (targetInSafeZone || target.catchCode.trim() != attempt.enteredCode.trim()) {
             lastHandledCatchAttemptTimestamp = attempt.timestamp
             return
@@ -569,10 +567,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 "winnerRole" to winner.name,
                 "totalCatches" to catches
             ))
+            val me = _uiState.value.myPlayer
             db.matchHistoryDao().insertMatch(MatchHistoryEntity(
-                roomName = s.roomName,
                 joinCode = s.joinCode,
-                winnerRole = winner.name,
+                rolePlayed = me.role.name,
+                isWin = me.role == winner,
                 durationSeconds = (s.durationMinutes * 60) - s.remainingSeconds,
                 catchesCount = catches
             ))
