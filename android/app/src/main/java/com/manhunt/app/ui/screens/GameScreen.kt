@@ -27,6 +27,7 @@ import com.manhunt.app.data.model.Player
 import com.manhunt.app.data.model.Role
 import com.manhunt.app.ui.components.*
 import com.manhunt.app.ui.theme.*
+import com.manhunt.app.util.GeoUtils
 import com.manhunt.app.viewmodel.GameUiState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
@@ -109,16 +110,12 @@ fun GameScreen(
     val headStartTimerText = String.format("%02d:%02d", headStartMins, headStartSecs)
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Both roles get the live map. OSMMapView already suppresses other players' markers for
-        // non-Seekers (and while Stealth is active), so a Hider sees only their own position and
-        // the zone geometry. Previously Hiders rendered an empty Box, which is pure black in OLED.
         GameMapLayer(
             state = state,
             headingFlow = headingFlow,
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Top Header HUD Card & Notification Stack
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -159,7 +156,6 @@ fun GameScreen(
                             )
                             RoleBadge(role = state.myPlayer.role)
 
-                            // Network Status indicator dot
                             val dotColor = when (state.networkStatus) {
                                 NetworkSyncStatus.ONLINE -> AppleHiderGreen
                                 NetworkSyncStatus.SYNCING -> AppleSeekerOrange
@@ -173,7 +169,6 @@ fun GameScreen(
                             )
                         }
 
-                        // Play zone status summary
                         val zoneLabel = if (session.isUnlimitedZone) {
                             "Zone: Unlimited"
                         } else if (state.isShrinkingZoneActive) {
@@ -190,7 +185,6 @@ fun GameScreen(
                         )
                     }
 
-                    // Countdown Timer
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -203,7 +197,6 @@ fun GameScreen(
                             color = if (remaining < 180) AppleDangerRed else AppleTextPrimary
                         )
 
-                        // Organizer Safety Pause Button
                         if (state.isOrganizer) {
                             IconButton(
                                 onClick = onToggleSafetyPause,
@@ -224,7 +217,6 @@ fun GameScreen(
                 }
             }
 
-            // A. Head Start Banner (for Hiders while running)
             if (state.headStartCountdownSeconds > 0 && state.myPlayer.role == Role.HIDER) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -248,11 +240,10 @@ fun GameScreen(
                 }
             }
 
-            // B. Auto-Ping (Anti-Camping) Radar Reveal Alert
             if (state.isAutoPingActive) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF6366F1), // Indigo
+                    color = Color(0xFF6366F1),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -272,7 +263,6 @@ fun GameScreen(
                 }
             }
 
-            // C. Safe Zone Shield Alert (Hider inside Safe Zone)
             if (state.isInSafeZone) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -295,7 +285,6 @@ fun GameScreen(
                 }
             }
 
-            // D. Safe Zone Notice for Seekers
             if (state.myPlayer.role == Role.SEEKER && state.safeZoneNotice != null) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -309,7 +298,7 @@ fun GameScreen(
                     ) {
                         Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Text(
-                            text = state.safeZoneNotice,
+                            text = state.safeZoneNotice!!,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -318,7 +307,6 @@ fun GameScreen(
                 }
             }
 
-            // E. Geofence Boundary Warning Alert
             if (state.isOutOfZone) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -341,7 +329,6 @@ fun GameScreen(
                 }
             }
 
-            // F. Cellular Network Disconnected Warning
             if (state.networkStatus == NetworkSyncStatus.OFFLINE) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -369,7 +356,6 @@ fun GameScreen(
                 }
             }
 
-            // G. Safety Pause Active
             if (session.isPaused) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -403,20 +389,20 @@ fun GameScreen(
                         Row(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(9.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(text = signalOption.emoji, fontSize = 19.sp)
-                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(signalOption.emoji, fontSize = 20.sp)
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = signalSenderName,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = AppleTextSecondary
                                 )
                                 Text(
                                     text = signalOption.text,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.Medium,
                                     color = AppleTextPrimary
                                 )
                             }
@@ -424,183 +410,32 @@ fun GameScreen(
                     }
                 }
             }
-        }
 
-        // 3. SEEKER FROZEN OVERLAY (During Head Start)
-        AnimatedVisibility(
-            visible = state.isSeekerFrozen,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.75f))
-                    .padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = AppleCardBackground,
-                    shadowElevation = 16.dp,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(AppleAccentBlue.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.HourglassTop,
-                                contentDescription = null,
-                                tint = AppleAccentBlue,
-                                modifier = Modifier.size(36.dp)
-                            )
-                        }
-
-                        Text(
-                            text = "WAIT FOR HEAD START",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            color = AppleTextPrimary
-                        )
-
-                        Text(
-                            text = headStartTimerText,
-                            fontSize = 44.sp,
-                            fontWeight = FontWeight.Black,
-                            color = AppleAccentBlue,
-                            letterSpacing = 2.sp
-                        )
-
-                        Text(
-                            text = "Hiders are currently scattering across the area.\nSeekers are frozen at base until countdown ends.",
-                            fontSize = 13.sp,
-                            color = AppleTextSecondary,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 18.sp
-                        )
-
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                            color = AppleAccentBlue,
-                            trackColor = AppleFill
-                        )
-                    }
-                }
+            if (recentSignalFeedback != null) {
+                Text(
+                    text = "Sent $recentSignalFeedback",
+                    fontSize = 11.sp,
+                    color = AppleTextSecondary
+                )
             }
         }
 
-        // 4. Bottom Controls HUD
+        // Bottom action column
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // A. If Hider: Display Rotary Compass pointing to nearest Seeker + Display Catch Code
             if (state.myPlayer.role == Role.HIDER) {
-                GameCompassLayer(
-                    headingFlow = headingFlow,
-                    targetBearing = state.nearestSeekerBearing,
-                    distanceMeters = state.nearestSeekerDistance,
-                    hasHeading = state.hasCompassHeading
-                )
-
-                if (state.myPlayer.isCaught) {
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = AppleCardBackground,
-                        shadowElevation = 6.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "You have been caught",
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppleDangerRed
-                        )
-                    }
-                } else {
-                    // Hider's Personal Catch Code Card
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = AppleCardBackground,
-                        shadowElevation = 6.dp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Your Catch Code",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = AppleTextSecondary
-                                )
-                                Text(
-                                    text = if (state.isInSafeZone) "Protected in Safe Zone (Cannot be tagged)" else "Give only if physically tagged",
-                                    fontSize = 11.sp,
-                                    color = if (state.isInSafeZone) AppleHiderGreen else AppleTextSecondary,
-                                    fontWeight = if (state.isInSafeZone) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (isCatchCodeRevealed) state.myPlayer.catchCode.ifEmpty { "----" } else "••••",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 2.sp,
-                                    color = AppleTextPrimary
-                                )
-                                IconButton(
-                                    onClick = { isCatchCodeRevealed = !isCatchCodeRevealed },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isCatchCodeRevealed) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (isCatchCodeRevealed) "Hide catch code" else "Reveal catch code",
-                                        tint = AppleTextSecondary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Hider abilities: Stealth + Jailbreak
-            if (state.myPlayer.role == Role.HIDER) {
-                val me = state.myPlayer
-                val isFree = !me.isCaught && !me.isInJail
-                val stealthText = when {
-                    !isFree -> "Stealth unavailable"
-                    state.isStealthActive -> "Stealth Active"
-                    state.stealthCooldownSeconds > 0 -> "Stealth Cooldown (${state.stealthCooldownSeconds}s)"
-                    else -> "Activate Stealth"
-                }
-                ApplePrimaryButton(
-                    text = stealthText,
-                    enabled = isFree && !session.isPaused && !state.isStealthActive && state.stealthCooldownSeconds <= 0,
-                    backgroundColor = AppleHiderPurple,
-                    onClick = onActivateStealth
+                val isFree = !state.myPlayer.isCaught && !state.isInJail
+                HiderActionPanel(
+                    state = state,
+                    isCatchCodeRevealed = isCatchCodeRevealed,
+                    onRevealToggle = { isCatchCodeRevealed = !isCatchCodeRevealed },
+                    onActivateStealth = onActivateStealth
                 )
 
                 if (session.jailEnabled && isFree && state.players.any { it.role == Role.HIDER && it.isInJail }) {
@@ -613,16 +448,31 @@ fun GameScreen(
                 }
             }
 
-            // B. If Seeker: Catch Button activates within 25 meters of a Hider!
+            // Seeker catch button — active when a Hider is within CATCH_PROXIMITY_METERS.
             if (state.myPlayer.role == Role.SEEKER) {
                 val catchable = state.nearbyCatchableHider
                 val isTargetInSafeZone = catchable?.isInSafeZone == true
+                val me = state.myPlayer
+                val nearestHiderMeters = state.players
+                    .filter { it.id != me.id && it.role == Role.HIDER && !it.isCaught }
+                    .mapNotNull { hider ->
+                        if (GeoUtils.hasValidCoordinates(me.latitude, me.longitude) &&
+                            GeoUtils.hasValidCoordinates(hider.latitude, hider.longitude)
+                        ) {
+                            GeoUtils.distanceMeters(
+                                me.latitude, me.longitude, hider.latitude, hider.longitude
+                            )
+                        } else null
+                    }
+                    .minOrNull()
 
+                val rangeLabel = "${Constants.CATCH_PROXIMITY_METERS.toInt()}m"
                 val buttonText = when {
                     state.isSeekerFrozen -> "Frozen: Waiting for Head Start"
                     isTargetInSafeZone -> "Target in Safe Zone (${catchable?.safeZoneName ?: "Base"})"
-                    catchable != null -> "⚡ Tag ${catchable.name} (Within 25m!)"
-                    else -> "Catch Button (Too Far)"
+                    catchable != null -> "⚡ Tag ${catchable.name} (Within $rangeLabel!)"
+                    nearestHiderMeters != null -> "Catch Button (Too Far: ${nearestHiderMeters.toInt()}m / $rangeLabel)"
+                    else -> "Catch Button (Waiting for GPS…)"
                 }
 
                 ApplePrimaryButton(
@@ -637,174 +487,158 @@ fun GameScreen(
                 )
             }
 
-            // Compact quick reactions and preset chat share the existing footer row.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    onClick = { showLeaveConfirmDialog = true },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "Leave Chase",
-                        fontSize = 13.sp,
-                        color = AppleTextSecondary
-                    )
-                }
-
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box {
-                        IconButton(
+                    if (canSendSignals) {
+                        Surface(
                             onClick = { showReactionMenu = true },
-                            enabled = canSendSignals,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(AppleCardBackground.copy(alpha = 0.96f))
+                            shape = RoundedCornerShape(14.dp),
+                            color = AppleCardBackground.copy(alpha = 0.95f)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.EmojiEmotions,
-                                contentDescription = "Send a reaction",
-                                tint = AppleTextPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Text("Reactions", modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
-                        DropdownMenu(
-                            expanded = showReactionMenu,
-                            onDismissRequest = { showReactionMenu = false }
+                        Surface(
+                            onClick = { showQuickChatSheet = true },
+                            shape = RoundedCornerShape(14.dp),
+                            color = AppleCardBackground.copy(alpha = 0.95f)
                         ) {
-                            REACTION_OPTIONS.forEach { option ->
-                                DropdownMenuItem(
-                                    text = { Text("${option.emoji}  ${option.text}") },
-                                    onClick = {
-                                        showReactionMenu = false
-                                        sendSignal(option)
-                                    }
-                                )
-                            }
+                            Text("Quick chat", modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
-
-                    IconButton(
-                        onClick = { showQuickChatSheet = true },
-                        enabled = canSendSignals,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(AppleCardBackground.copy(alpha = 0.96f))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ChatBubbleOutline,
-                            contentDescription = "Open preset chat",
-                            tint = AppleAccentBlue,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                }
+                TextButton(onClick = { showLeaveConfirmDialog = true }) {
+                    Text("Leave", color = AppleDangerRed, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
 
-        // Catch Bottom Sheet for entering 4-digit code
-        showCatchSheetForHider?.let { hider ->
+        if (showCatchSheetForHider != null) {
             CatchBottomSheet(
-                targetHider = hider,
+                hider = showCatchSheetForHider!!,
                 onDismiss = { showCatchSheetForHider = null },
-                onSubmitCatchCode = { enteredPin ->
+                onSubmitCode = { code ->
+                    val target = showCatchSheetForHider
+                    if (target != null) {
+                        onAttemptCatch(target.id, code)
+                    }
                     showCatchSheetForHider = null
-                    onAttemptCatch(hider.id, enteredPin)
                 }
             )
         }
 
-        if (showQuickChatSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showQuickChatSheet = false },
-                containerColor = AppleCardBackground
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Quick chat",
-                        fontSize = 21.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AppleTextPrimary
-                    )
-                    Text(
-                        text = "Preset messages only — typing is off.",
-                        fontSize = 13.sp,
-                        color = AppleTextSecondary
-                    )
-                    QUICK_CHAT_OPTIONS.forEach { option ->
-                        Button(
-                            onClick = {
-                                showQuickChatSheet = false
-                                sendSignal(option)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = AppleFill,
-                                contentColor = AppleTextPrimary
-                            )
-                        ) {
-                            Text(
-                                text = "${option.emoji}  ${option.text}",
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Start
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = recentSignalFeedback != null,
-            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 92.dp),
-            enter = fadeIn(MotionTokens.smoothTween(MotionTokens.FeedbackMillis)) + slideInVertically(MotionTokens.CardOffset) { it / 3 },
-            exit = fadeOut(MotionTokens.smoothTween(MotionTokens.FeedbackMillis)) + slideOutVertically(MotionTokens.CardOffset) { it / 3 }
-        ) {
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.inverseSurface,
-                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                shadowElevation = 6.dp
-            ) {
-                Text(
-                    text = recentSignalFeedback.orEmpty(),
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-
-        // Leave Confirmation Dialog
         if (showLeaveConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { showLeaveConfirmDialog = false },
-                title = { Text("Leave Game?") },
-                text = { Text("You will be removed from the active match roster.") },
+                title = { Text("Leave match?") },
+                text = { Text("You will leave the live hunt. You can rejoin with the room code if the match is still running.") },
                 confirmButton = {
                     TextButton(onClick = {
                         showLeaveConfirmDialog = false
                         onLeaveGame()
-                    }) {
-                        Text("Leave", color = AppleDangerRed, fontWeight = FontWeight.Bold)
-                    }
+                    }) { Text("Leave", color = AppleDangerRed) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showLeaveConfirmDialog = false }) {
-                        Text("Cancel", color = AppleTextPrimary)
-                    }
+                    TextButton(onClick = { showLeaveConfirmDialog = false }) { Text("Stay") }
                 }
+            )
+        }
+
+        if (showReactionMenu) {
+            ModalBottomSheet(onDismissRequest = { showReactionMenu = false }) {
+                Column(Modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Quick reactions", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    REACTION_OPTIONS.forEach { option ->
+                        TextButton(onClick = {
+                            sendSignal(option)
+                            showReactionMenu = false
+                        }) {
+                            Text("${option.emoji}  ${option.text}")
+                        }
+                    }
+                    Spacer(Modifier = Modifier.height(24.dp))
+                }
+            }
+        }
+
+        if (showQuickChatSheet) {
+            ModalBottomSheet(onDismissRequest = { showQuickChatSheet = false }) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Quick chat", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    QUICK_CHAT_OPTIONS.forEach { option ->
+                        TextButton(onClick = {
+                            sendSignal(option)
+                            showQuickChatSheet = false
+                        }) {
+                            Text("${option.emoji}  ${option.text}")
+                        }
+                    }
+                    Spacer(Modifier = Modifier.height(24.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HiderActionPanel(
+    state: GameUiState,
+    isCatchCodeRevealed: Boolean,
+    onRevealToggle: () -> Unit,
+    onActivateStealth: () -> Unit
+) {
+    val me = state.myPlayer
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = AppleCardBackground.copy(alpha = 0.96f),
+        shadowElevation = 6.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Your catch code", fontSize = 12.sp, color = AppleTextSecondary)
+                    Text(
+                        text = if (isCatchCodeRevealed) me.catchCode.ifBlank { "----" } else "••••",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp,
+                        color = AppleTextPrimary
+                    )
+                }
+                TextButton(onClick = onRevealToggle) {
+                    Text(if (isCatchCodeRevealed) "Hide" else "Reveal")
+                }
+            }
+
+            if (state.nearestSeekerDistance >= 0) {
+                Text(
+                    text = "Nearest seeker ~ ${state.nearestSeekerDistance.toInt()}m",
+                    fontSize = 12.sp,
+                    color = AppleTextSecondary
+                )
+            }
+
+            val stealthReady = !state.isStealthActive && state.stealthCooldownSeconds <= 0 && !me.isCaught && !state.isInJail
+            ApplePrimaryButton(
+                text = when {
+                    state.isStealthActive -> "Stealth active"
+                    state.stealthCooldownSeconds > 0 -> "Stealth cooldown ${state.stealthCooldownSeconds}s"
+                    else -> "Activate Stealth"
+                },
+                enabled = stealthReady && state.session?.isPaused != true,
+                backgroundColor = AppleHiderPurple,
+                onClick = onActivateStealth
             )
         }
     }
@@ -814,39 +648,21 @@ fun GameScreen(
 private fun GameMapLayer(
     state: GameUiState,
     headingFlow: StateFlow<Float>,
-    modifier: Modifier
+    modifier: Modifier = Modifier
 ) {
-    val headingDegrees by headingFlow.collectAsState()
-    val session = state.session ?: return
-    OSMMapView(
-        playerLat = state.myPlayer.latitude,
-        playerLng = state.myPlayer.longitude,
-        userRole = state.myPlayer.role,
-        zoneCenterLat = session.zoneCenterLat,
-        zoneCenterLng = session.zoneCenterLng,
-        zoneRadiusMeters = state.currentDynamicRadiusMeters,
-        isUnlimitedZone = session.isUnlimitedZone,
-        safeZones = session.safeZones,
-        isAutoPingActive = state.isAutoPingActive,
-        otherPlayers = state.players.filter { it.id != state.myPlayer.id },
-        headingDegrees = headingDegrees,
-        hasHeading = state.hasCompassHeading,
-        playerLocationUpdatedAtEpochMs = state.myPlayer.lastUpdatedEpochMs,
-        modifier = modifier
-    )
-}
+    val heading by headingFlow.collectAsState()
+    val me = state.myPlayer
+    val session = state.session
+    val hasHeading = state.hasCompassHeading
+    val players = state.players
+    val distanceMeters = state.nearestSeekerDistance
 
-@Composable
-private fun GameCompassLayer(
-    headingFlow: StateFlow<Float>,
-    targetBearing: Float,
-    distanceMeters: Double,
-    hasHeading: Boolean
-) {
-    val headingDegrees by headingFlow.collectAsState()
-    CompassStrip(
-        deviceHeading = headingDegrees,
-        targetBearing = targetBearing,
+    OSMMapView(
+        modifier = modifier,
+        myPlayer = me,
+        players = players,
+        session = session,
+        headingDegrees = heading,
         distanceMeters = distanceMeters,
         hasHeading = hasHeading
     )
