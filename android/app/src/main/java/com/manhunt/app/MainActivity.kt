@@ -178,9 +178,11 @@ class MainActivity : ComponentActivity() {
 
                     val activeMatch = uiState.session?.status == GameStatus.RUNNING ||
                         uiState.session?.status == GameStatus.PAUSED
-                    // Defensive: never resolve to RESULTS (or an active-match shell) without a
-                    // session, because those screens return early and render an empty black surface.
+                    // CREATE_ROOM is valid with no session (that's how you open the create flow).
+                    // RESULTS still requires a finished session or it paints a black screen.
                     val resolvedTransientDestination = when {
+                        transientDestination == TransientDestination.CREATE_ROOM ->
+                            TransientDestination.CREATE_ROOM
                         uiState.session == null -> null
                         transientDestination == TransientDestination.RESULTS &&
                             uiState.session?.status != GameStatus.FINISHED -> null
