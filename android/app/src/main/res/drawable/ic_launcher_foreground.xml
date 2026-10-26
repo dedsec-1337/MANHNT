@@ -5,19 +5,11 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <!--
-      Adaptive icons mask to a circle/squircle.
-      Safe zone is the center ~66dp (about 21..87 on a 108 canvas).
-      Full "MANHNT" was wider than the mask and clipped to "MAN".
-      Use a bold centered M monogram that stays fully inside the safe zone.
+      Adaptive icon safe zone ~ center 66dp (21..87 on 108 canvas).
+      Full MANHNT wordmark was clipped by the circular mask.
+      Centered bold M stays fully visible on all launchers.
     -->
-    <!-- Outer ring (subtle brand frame) -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.5"
-        android:pathData="M54,28 A26,26 0 1,1 53.99,28" />
-    <!-- Bold geometric M -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M36,72 L36,36 L44,36 L54,56 L64,36 L72,36 L72,72 L64,72 L64,50 L54,68 L44,50 L44,72 Z" />
+        android:pathData="M34,74 L34,34 L44,34 L54,56 L64,34 L74,34 L74,74 L64.5,74 L64.5,48 L54,68 L43.5,48 L43.5,74 Z" />
 </vector>
