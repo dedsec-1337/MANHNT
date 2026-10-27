@@ -10,6 +10,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.manhunt.app.data.model.LocationRevealSnapshot
 import com.manhunt.app.data.model.Player
 import com.manhunt.app.data.model.Role
 import com.manhunt.app.data.model.SafeZone
@@ -72,6 +73,7 @@ fun OSMMapView(
     playerLocationUpdatedAtEpochMs: Long = 0L,
     centerOnPlayer: Boolean = true,
     showOtherPlayerLocations: Boolean = true,
+    frozenRevealLocations: Map<String, LocationRevealSnapshot> = emptyMap(),
     initialZoom: Double = 17.0,
     modifier: Modifier = Modifier
 ) {
@@ -105,7 +107,7 @@ fun OSMMapView(
         playerLat, playerLng, userRole, zoneCenterLat, zoneCenterLng, zoneRadiusMeters,
         isUnlimitedZone, safeZones, isAutoPingActive, otherPlayers, jailLat, jailLng,
         jailRadiusMeters, jailEnabled, hasHeading, playerLocationUpdatedAtEpochMs,
-        showOtherPlayerLocations
+        showOtherPlayerLocations, frozenRevealLocations
     ) {
         MapOverlayContent(
             playerLat = playerLat,
@@ -128,12 +130,15 @@ fun OSMMapView(
             otherPlayerLocationFreshness = otherPlayers.map {
                 it.id to GeoUtils.isLocationRecent(it.lastUpdatedEpochMs)
             },
-            // Show last-known positions even when GPS is briefly stale.
-            visibleOtherPlayerIds = otherPlayers.asSequence()
-                .filter { it.role == Role.HIDER && !it.isCaught }
-                .filterNot { it.isStealthActive && System.currentTimeMillis() < it.stealthUntilEpochMs }
-                .map { it.id }
-                .toSet(),
+            visibleOtherPlayerIds = if (frozenRevealLocations.isNotEmpty()) {
+                frozenRevealLocations.keys
+            } else {
+                otherPlayers.asSequence()
+                    .filter { it.role == Role.HIDER && !it.isCaught }
+                    .filterNot { it.isStealthActive && System.currentTimeMillis() < it.stealthUntilEpochMs }
+                    .map { it.id }
+                    .toSet()
+            },
             showOtherPlayerLocations = showOtherPlayerLocations
         )
     }
@@ -218,14 +223,18 @@ fun OSMMapView(
                     mapRenderState.playerMarker = selfMarker
                 }
 
-                if (showOtherPlayerLocations && (userRole == Role.SEEKER || isAutoPingActive)) {
+                if (showOtherPlayerLocations && (userRole == Role.SEEKER || isAutoPingActive || frozenRevealLocations.isNotEmpty())) {
                     for (hider in otherPlayers.filter { it.id in overlayContent.visibleOtherPlayerIds }) {
-                        if (GeoUtils.hasValidCoordinates(hider.latitude, hider.longitude)) {
+                        val frozen = frozenRevealLocations[hider.id]
+                        val lat = frozen?.latitude ?: hider.latitude
+                        val lng = frozen?.longitude ?: hider.longitude
+                        if (GeoUtils.hasValidCoordinates(lat, lng)) {
                             val hiderMarker = Marker(mapView).apply {
-                                position = GeoPoint(hider.latitude, hider.longitude)
+                                position = GeoPoint(lat, lng)
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                                 title = when {
                                     hider.isInSafeZone -> "${hider.name} (Safe)"
+                                    frozen != null -> "${hider.name} (Reveal)"
                                     else -> "${hider.name} (Hider)"
                                 }
                                 icon = context.getDrawable(
