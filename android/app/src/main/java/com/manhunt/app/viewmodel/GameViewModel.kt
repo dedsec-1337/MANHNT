@@ -68,6 +68,9 @@ data class GameUiState(
     val canJailbreak: Boolean = false,
     val jailbreakHoldProgress: Int = 0,
     val huntersNearJail: List<Player> = emptyList(),
+    /** Last reveal snapshots for map pins (frozen until next auto-ping). */
+    val frozenRevealLocations: Map<String, LocationRevealSnapshot> = emptyMap(),
+    val lastRevealEpochMs: Long = 0L,
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -101,6 +104,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var lastCatchAckTimestamp: Long = 0L
     private val handledStealthRequests = mutableMapOf<String, Long>()
     private val handledStealthExpiries = mutableMapOf<String, Long>()
+    private var wasAutoPingActive: Boolean = false
 
     init {
         viewModelScope.launch {
@@ -439,7 +443,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val submitted = firebaseSync.sendCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim()))
             if (submitted) {
                 _uiState.update {
-                    it.copy(toastMessage = "Catch code sent. Waiting for host validation.")
+                    it.copy(toastMessage = "Tag submitted — confirming…")
                 }
                 onResult(true, "Catch code sent")
             } else {
@@ -769,6 +773,36 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         // `lastCatchAttempt` is host-readable only, so a non-host Seeker learns the outcome from the
         // per-seeker ack node the host writes after validation.
+        
+        // Frozen manhunt reveals: when a ping window opens, snapshot hider positions once and keep them local.
+        val pingActive = room.session.isAutoPingActive
+        if (pingActive && !wasAutoPingActive) {
+            val snaps = room.players.values
+                .filter { it.role == Role.HIDER && !it.isCaught && GeoUtils.hasValidCoordinates(it.latitude, it.longitude) }
+                .filterNot { it.isStealthActive && now < it.stealthUntilEpochMs }
+                .associate { p ->
+                    p.id to LocationRevealSnapshot(
+                        playerId = p.id,
+                        latitude = p.latitude,
+                        longitude = p.longitude,
+                        capturedAtEpochMs = now,
+                        accuracyMeters = 0.0
+                    )
+                }
+            if (snaps.isNotEmpty()) {
+                _uiState.update {
+                    it.copy(
+                        frozenRevealLocations = snaps,
+                        lastRevealEpochMs = now,
+                        toastMessage = if (it.myPlayer.role == Role.SEEKER) {
+                            "Location reveal — pins frozen until next ping"
+                        } else it.toastMessage
+                    )
+                }
+            }
+        }
+        wasAutoPingActive = pingActive
+
         val ack = room.catchAck
         if (ack != null && ack.seekerId == me.id && ack.timestamp > lastCatchAckTimestamp) {
             lastCatchAckTimestamp = ack.timestamp
@@ -777,7 +811,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     toastMessage = if (ack.accepted) {
                         "Catch confirmed: ${ack.targetName.ifBlank { "Hider" }}"
                     } else {
-                        "Catch rejected — check the code and distance"
+                        "Catch rejected — check the code or safe zone"
                     }
                 )
             }
@@ -997,14 +1031,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
                 val seeker = state.players.firstOrNull { it.id == attempt.seekerId }
                 val target = state.players.firstOrNull { it.id == attempt.targetHiderId }
+                // Local/code proof only — do not reject on GPS freshness or distance.
                 if (seeker == null || target == null ||
                     seeker.role != Role.SEEKER || target.role != Role.HIDER ||
                     target.isCaught || target.isInJail || target.immunityUntilEpochMs > now ||
-                    seeker.id == target.id ||
-                    !GeoUtils.hasValidCoordinates(seeker.latitude, seeker.longitude) ||
-                    !GeoUtils.hasValidCoordinates(target.latitude, target.longitude) ||
-                    !GeoUtils.isLocationRecent(seeker.lastUpdatedEpochMs, now) ||
-                    !GeoUtils.isLocationRecent(target.lastUpdatedEpochMs, now)
+                    seeker.id == target.id
                 ) {
                     lastHandledCatchAttemptTimestamp = attempt.timestamp
                     ack(false)
@@ -1050,7 +1081,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val remainingHiders = _uiState.value.players.filter {
                     it.role == Role.HIDER && !it.isCaught
                 }
-                if (remainingHiders.isEmpty()) endGame(Role.SEEKER)
+                if (remainingHiders.isEmpty()) {
+                    // Ensure local session flips immediately so UI navigates even if network lags.
+                    _uiState.update { cur ->
+                        cur.copy(
+                            session = cur.session?.copy(
+                                status = GameStatus.FINISHED,
+                                winnerRole = Role.SEEKER,
+                                totalCatches = cur.players.count { it.role == Role.HIDER && it.isCaught }
+                            ),
+                            toastMessage = "All runners tagged — seekers win!"
+                        )
+                    }
+                    endGame(Role.SEEKER)
+                }
             } finally {
                 if (catchAttemptInFlightTimestamp == attempt.timestamp) {
                     catchAttemptInFlightTimestamp = 0L
