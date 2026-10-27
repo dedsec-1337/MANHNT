@@ -70,6 +70,15 @@ data class GameSession(
     val jailbreakProgressSeconds: Int = 0
 )
 
+/** Frozen map clue published at an auto-ping / reveal boundary. */
+data class LocationRevealSnapshot(
+    val playerId: String = "",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0,
+    val capturedAtEpochMs: Long = 0L,
+    val accuracyMeters: Double = 0.0
+)
+
 data class LocationPayload(
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
