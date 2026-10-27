@@ -26,6 +26,9 @@ import com.manhunt.app.data.model.NetworkSyncStatus
 import com.manhunt.app.data.model.Player
 import com.manhunt.app.data.model.Role
 import com.manhunt.app.ui.components.*
+import com.manhunt.app.util.QrCodeUtil
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
 import com.manhunt.app.ui.theme.*
 import com.manhunt.app.viewmodel.GameUiState
 import kotlinx.coroutines.delay
@@ -539,47 +542,74 @@ fun GameScreen(
                         shadowElevation = 6.dp,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 18.dp, vertical = 12.dp)
                         ) {
-                            Column {
-                                Text(
-                                    text = "Your Catch Code",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = AppleTextSecondary
-                                )
-                                Text(
-                                    text = if (state.isInSafeZone) "Protected in Safe Zone (Cannot be tagged)" else "Give only if physically tagged",
-                                    fontSize = 11.sp,
-                                    color = if (state.isInSafeZone) AppleHiderGreen else AppleTextSecondary,
-                                    fontWeight = if (state.isInSafeZone) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (isCatchCodeRevealed) state.myPlayer.catchCode.ifEmpty { "----" } else "••••",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 2.sp,
-                                    color = AppleTextPrimary
-                                )
-                                IconButton(
-                                    onClick = { isCatchCodeRevealed = !isCatchCodeRevealed },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isCatchCodeRevealed) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (isCatchCodeRevealed) "Hide catch code" else "Reveal catch code",
-                                        tint = AppleTextSecondary,
-                                        modifier = Modifier.size(18.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Your Catch Code / QR",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = AppleTextSecondary
+                                    )
+                                    Text(
+                                        text = if (state.isInSafeZone) "Protected in Safe Zone (Cannot be tagged)" else "Show code or QR only when physically tagged",
+                                        fontSize = 11.sp,
+                                        color = if (state.isInSafeZone) AppleHiderGreen else AppleTextSecondary,
+                                        fontWeight = if (state.isInSafeZone) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (isCatchCodeRevealed) state.myPlayer.catchCode.ifEmpty { "----" } else "••••",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 2.sp,
+                                        color = AppleTextPrimary
+                                    )
+                                    IconButton(
+                                        onClick = { isCatchCodeRevealed = !isCatchCodeRevealed },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isCatchCodeRevealed) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                            contentDescription = if (isCatchCodeRevealed) "Hide catch code" else "Reveal catch code",
+                                            tint = AppleTextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            if (isCatchCodeRevealed && state.myPlayer.catchCode.length == 4) {
+                                val payload = QrCodeUtil.catchPayload(
+                                    joinCode = session.joinCode,
+                                    playerId = state.myPlayer.id,
+                                    catchCode = state.myPlayer.catchCode
+                                )
+                                val qrBitmap = remember(payload) { QrCodeUtil.encodeToBitmap(payload, 512) }
+                                Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "Catch QR code",
+                                    modifier = Modifier
+                                        .padding(top = 12.dp)
+                                        .size(160.dp)
+                                        .align(Alignment.CenterHorizontally)
+                                )
+                                Text(
+                                    text = "Seeker can type the code — QR is local proof",
+                                    fontSize = 10.sp,
+                                    color = AppleTextSecondary,
+                                    modifier = Modifier
+                                        .padding(top = 6.dp)
+                                        .align(Alignment.CenterHorizontally)
+                                )
                             }
                         }
                     }
@@ -832,6 +862,8 @@ private fun GameMapLayer(
         headingDegrees = headingDegrees,
         hasHeading = state.hasCompassHeading,
         playerLocationUpdatedAtEpochMs = state.myPlayer.lastUpdatedEpochMs,
+        showOtherPlayerLocations = state.myPlayer.role == Role.SEEKER || state.isAutoPingActive || state.frozenRevealLocations.isNotEmpty(),
+        frozenRevealLocations = state.frozenRevealLocations,
         modifier = modifier
     )
 }
