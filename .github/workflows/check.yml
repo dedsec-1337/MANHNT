@@ -27,6 +27,20 @@ jobs:
             echo "OK $f"
           done
 
+      - name: Verify ZXing QR dependency is declared
+        run: |
+          set -e
+          gradle_file="android/app/build.gradle.kts"
+          qr_util="android/app/src/main/java/com/manhunt/app/util/QrCodeUtil.kt"
+          grep -Fq 'implementation("com.google.zxing:core:3.5.3")' "$gradle_file" || {
+            echo "Missing ZXing core dependency required by QrCodeUtil.kt"
+            exit 1
+          }
+          grep -Fq 'import com.google.zxing.BarcodeFormat' "$qr_util"
+          grep -Fq 'import com.google.zxing.EncodeHintType' "$qr_util"
+          grep -Fq 'import com.google.zxing.qrcode.QRCodeWriter' "$qr_util"
+          echo "ZXing dependency and QR imports are present"
+
       - name: Reject placeholder / stub ViewModel
         run: |
           set -e
