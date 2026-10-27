@@ -13,8 +13,7 @@ object Constants {
     const val GAME_SIGNAL_MAX_FUTURE_SKEW_MS = 5_000L
     const val GAME_SIGNAL_SEND_COOLDOWN_MS = 1_500L
 
-    // Catch range must absorb write/poll lag and real-world GPS error (often 5–20m+).
-    // 25m felt unusable outdoors; 50m is still close-range tagging without being trivial.
+    // Catch range (reference only — tag is code/QR proof, not distance-gated).
     const val CATCH_PROXIMITY_METERS = 50.0
 
     const val HEARTBEAT_FAR_METERS = 80.0
@@ -32,4 +31,10 @@ object Constants {
 
     const val MAX_DISPUTES_PER_GAME = 2
     const val CATCH_CONFIRM_TIMEOUT_SECONDS = 12
+
+    // Manhunt reveal: snapshot once per ping window, then freeze pins locally.
+    const val REVEAL_PIN_FROZEN_UNTIL_NEXT_PING = true
+    const val REVEAL_MIN_ACCURACY_METERS = 50.0
+    const val CATCH_OPTIMISTIC_UI = true
+    const val CATCH_FIREBASE_CONFIRM_TIMEOUT_MS = 8_000L
 }
