@@ -19,8 +19,8 @@
 :root{color-scheme:dark;--bg:#000;--s:#121311;--l:#30312E;--t:#F3F1E9;--m:#A6A59F;--a:#6EE7D1;--h:#C4A7FF;--sans:"Helvetica Neue",Helvetica,Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 *,*::before,*::after{box-sizing:border-box}
 body,h1,h2,h3,p,ul,ol,dl,dd,figure{margin:0}
-html{background:var(--bg);color:var(--t);font:400 1rem/1.55 var(--sans);scroll-behavior:smooth;scroll-padding-top:4.5rem;-webkit-text-size-adjust:100%}
-body{overflow-x:clip;padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);-webkit-tap-highlight-color:transparent}
+html{background:var(--bg);color:var(--t);font:400 1rem/1.55 var(--sans);scroll-behavior:smooth;scroll-padding-top:var(--hh,4.5rem);-webkit-text-size-adjust:100%}
+body{padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);-webkit-tap-highlight-color:transparent}
 ul,ol{padding:0;list-style:none}
 a{color:inherit;text-underline-offset:.2em}
 ::selection{background:var(--a);color:#000}
@@ -84,7 +84,7 @@ h3{font-size:1.25rem;letter-spacing:-.01em;font-weight:600}
 .role dd{padding-bottom:1.1rem;border-bottom:1px solid var(--l);font-size:1.05rem}
 @media(max-width:699px){.roles{grid-template-columns:1fr}.role:first-child{padding-right:0}.role+.role{border-left:0;padding-left:0;border-top:1px solid var(--l);margin-top:2.5rem}}
 .rv{height:330vh;position:relative}
-.pn{position:sticky;top:3.5rem;min-height:calc(100svh - 3.5rem);display:grid;grid-template-columns:5fr 7fr;gap:clamp(1.5rem,5vw,5rem);align-items:center}
+.pn{position:sticky;top:var(--hh,3.5rem);min-height:calc(100svh - var(--hh,3.5rem));display:grid;grid-template-columns:5fr 7fr;gap:clamp(1.5rem,5vw,5rem);align-items:center}
 .pn p{max-width:34ch;color:var(--m)}
 .pn h3{font-size:clamp(1.8rem,3.6vw,2.8rem);letter-spacing:-.035em;line-height:1.02;margin:.8rem 0 1rem;color:var(--t)}
 .map{aspect-ratio:1;width:100%;max-height:calc(100svh - 7rem);justify-self:end;border:1px solid var(--l);background:var(--s)}
@@ -100,7 +100,7 @@ h3{font-size:1.25rem;letter-spacing:-.01em;font-weight:600}
 .tr circle{fill:none;stroke:var(--m);stroke-opacity:.5}
 .clock{font:500 clamp(2.6rem,6vw,4.5rem)/1 var(--mono);letter-spacing:-.04em;margin:.4rem 0 1rem;color:var(--t)}
 .dot{display:inline-block;width:8px;height:8px;background:var(--a);margin-right:.6rem}
-@media(max-width:799px){.pn{grid-template-columns:1fr;align-content:start;gap:1rem;padding-top:1rem}.map{order:-1;height:42svh;width:auto;max-width:100%;justify-self:center}.clock{font-size:2.4rem;margin:.2rem 0 .6rem}.pn h3{margin:.4rem 0 .5rem}}
+@media(max-width:799px){.pn{grid-template-columns:1fr;align-content:start;gap:.8rem;padding-top:.6rem}.pn p:not(.clock){font-size:.95rem}.map{order:-1;height:min(34svh,calc(100vw - 2.5rem));width:auto;max-width:100%;justify-self:center}.clock{font-size:2.4rem;margin:.2rem 0 .6rem}.pn h3{margin:.4rem 0 .5rem}}
 .mx{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--l)}
 .mx>div{padding:2rem 1.5rem 0 0}
 .mx>div+div{border-left:1px solid var(--l);padding-left:1.5rem}
@@ -126,7 +126,8 @@ h3{font-size:1.25rem;letter-spacing:-.01em;font-weight:600}
 .code button{flex:none;font:600 .8rem var(--sans);color:var(--t);background:none;border:1px solid var(--m);padding:.4rem .8rem;cursor:pointer}
 .code button:hover{background:var(--t);color:#000}
 .note{margin-top:1.4rem;max-width:56ch}
-@media(max-width:899px){.bg{grid-template-columns:1fr}}
+.bg>div,.steps li>div{min-width:0}
+@media(max-width:899px){.bg{grid-template-columns:minmax(0,1fr)}}
 .big{font-size:clamp(2.4rem,7.4vw,6.4rem);letter-spacing:-.05em;line-height:.95;max-width:14ch}
 .rules{display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem;margin-top:4rem}
 .rules li{border-top:1px solid var(--t);padding-top:1rem;color:var(--m)}
@@ -189,6 +190,9 @@ h3{font-size:1.25rem;letter-spacing:-.01em;font-weight:600}
 @keyframes sp{from{transform:scale(.8);opacity:.8}to{transform:scale(2.8);opacity:0}}
 .js .scan{animation:scan 2.6s ease-in-out infinite alternate}
 @keyframes scan{to{transform:translateY(20.4px)}}
+.pn .clock{color:var(--t)}
+.pn .nx{margin-top:1.2rem}
+@media(max-width:759px){.bar{min-height:3rem}.hd nav a{padding:.7rem 0}}
 @media(max-width:799px){.rv{height:300vh}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.pin,.btn{transition:none}#pr.go{animation:none}}
 </style>
@@ -259,8 +263,9 @@ h3{font-size:1.25rem;letter-spacing:-.01em;font-weight:600}
 <p class="mono">Auto-ping reveals</p>
 <h3>Pins freeze between pings.</h3>
 <p>Every 2 or 5 minutes the app snapshots runner positions. Seekers see those pins and nothing else until the next ping. Scroll to run the clock.</p>
+<p class="mono nx">Next ping</p>
 <p class="clock" id="clock" aria-hidden="true">05:00</p>
-<p class="mono"><span class="dot"></span><span id="stg">No reveal yet. Next ping in</span></p>
+<p class="mono"><span class="dot"></span><span id="stg">No reveal yet.</span></p>
 </div>
 <div class="map"><svg viewBox="0 0 400 400" role="img" aria-label="Diagram: runner pins stay frozen on the map, then jump to new positions on each ping">
 <g data-contours="200,200,16,12,10,3"></g>
@@ -353,8 +358,9 @@ for(k=0;k<3;k++){pg[k].style.opacity=s?1:0;if(s)pg[k].style.transform='translate
 tg[0].style.opacity=s>1?1:0;tg[1].style.opacity=s>2?1:0;st=s}
 var a=s?T[s-1]:0,b=T[s];
 if(b===undefined){clock.textContent='--:--';stg.textContent='Ping 3 of 3 shown. The hunt goes on.'}
-else{clock.textContent=mmss(Math.round((1-(p-a)/(b-a))*INT));stg.textContent=(s?'Ping '+s+' of 3 shown. Pins frozen. Next ping in':'No reveal yet. First ping in')}
+else{clock.textContent=mmss(Math.round((1-(p-a)/(b-a))*INT));stg.textContent=(s?'Ping '+s+' of 3 shown. Pins frozen.':'No reveal yet.')}
 }
+function hh(){document.documentElement.style.setProperty('--hh',$('.hd').offsetHeight+'px')}hh();addEventListener('resize',hh);
 var JS=document.documentElement.classList.contains('js'),bar=$('#pg'),hb=$('.hbg'),tick=0;
 function sc(){tick=0;var y=scrollY,m=document.documentElement.scrollHeight-innerHeight;bar.style.transform='scaleX('+(m>0?Math.min(1,y/m):0)+')';if(JS&&y<innerHeight*1.5)hb.style.transform='translate3d(0,'+(y*.14).toFixed(1)+'px,0)';upd()}
 addEventListener('scroll',function(){tick||(tick=requestAnimationFrame(sc))},{passive:true});addEventListener('resize',upd);upd();sc();
@@ -364,7 +370,7 @@ var bg=$('.big');bg.innerHTML=bg.textContent.split(' ').map(function(w,k){return
 document.querySelectorAll('.role dl,.ft ul').forEach(function(e){e.classList.add('st')});
 function scr(el){var sp=el.children,n=0,fin='4829',iv=setInterval(function(){for(var k=0;k<4;k++)sp[k].textContent=n>10+k*3?fin[k]:Math.floor(Math.random()*10);if(++n>22)clearInterval(iv)},55)}
 document.querySelectorAll('.loop li,.st>*').forEach(function(el){el.style.setProperty('--k',[].indexOf.call(el.parentNode.children,el))});
-var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');if(x.target.classList.contains('digs'))scr(x.target);io.unobserve(x.target)}})},{threshold:.2,rootMargin:'0px 0px -8% 0px'});
+var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){x.target.classList.add('in');if(x.target.classList.contains('digs'))scr(x.target);io.unobserve(x.target)}})},{threshold:0,rootMargin:'0px 0px -10% 0px'});
 document.querySelectorAll('h2:not(.vh),.role h3,.loop,.st,.sh,.digs,.hero~section [data-contours]').forEach(function(el){io.observe(el)});
 requestAnimationFrame(function(){requestAnimationFrame(function(){$('.hero').classList.add('go')})});
 var L={};document.querySelectorAll('.hd nav a').forEach(function(a){L[a.hash.slice(1)]=a});
