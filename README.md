@@ -1,125 +1,133 @@
-<div align="center">
+<p align="center">
+  <img src="https://img.shields.io/badge/MANHNT-v1.1.0-0D1117?style=for-the-badge&labelColor=161B22&color=3DDC84" alt="MANHNT" />
+</p>
 
-# MANHNT
+<h1 align="center">MANHNT</h1>
 
-### Real-life GPS manhunt. Free. Open source. Android.
+<p align="center">
+  <strong>Real-life GPS manhunt for Android</strong><br/>
+  <em>Seekers hunt · Runners hide · Your phone is the referee</em>
+</p>
 
-[![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
-[![Kotlin](https://img.shields.io/badge/Kotlin-1.9-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
-[![Compose](https://img.shields.io/badge/Jetpack%20Compose-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
-[![License](https://img.shields.io/badge/License-Apache%202.0-0B5FFF?style=for-the-badge)](LICENSE)
-[![CI](https://img.shields.io/github/actions/workflow/status/dedsec-1337/MANHNT/check.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/dedsec-1337/MANHNT/actions)
+<p align="center">
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android" /></a>
+  <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-1.9-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin" /></a>
+  <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/Compose-UI-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-0B5FFF?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/dedsec-1337/MANHNT/actions"><img src="https://img.shields.io/github/actions/workflow/status/dedsec-1337/MANHNT/check.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
+</p>
 
-**Seekers hunt. Runners hide. Your phone is the referee.**
+<p align="center">
+  <a href="#features">Features</a> ·
+  <a href="#how-to-play">How to play</a> ·
+  <a href="#build">Build</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="RELEASE_NOTES_1.0.0.md">1.0.0 notes</a>
+</p>
 
-No subscriptions · No ads · No account walls · Build the APK and play
+---
 
-[Features](#features) · [How to play](#how-to-play) · [Build](#build) · [Architecture](#architecture) · [Changelog](CHANGELOG.md)
+<table>
+<tr>
+<td width="50%" valign="top">
 
-</div>
+### Free by design
+
+No subscriptions. No ads. No forced accounts.  
+Clone the repo, build the APK, play with friends.
+
+</td>
+<td width="50%" valign="top">
+
+### Built for outside
+
+Parks · campuses · city blocks.  
+Timed map reveals. Face-to-face tags. Optional Bluetooth assist.
+
+</td>
+</tr>
+</table>
 
 ---
 
 ## Why MANHNT?
 
-Most manhunt apps charge rent for playground rules.
-
-| Them | MANHNT |
-|------|--------|
-| Subscriptions & paywalled modes | Free forever |
-| Closed source | Apache 2.0 — fork it |
-| Live-track every second (glitchy pins) | **Timed reveals** + **frozen map pins** |
-| GPS “too far” blocking real tags | **Code / QR proof** when you’re actually there |
-| Accounts required | Anonymous Firebase auth only |
-
-Built for parks, campuses, and city blocks — not for microtransactions.
+| Typical apps | **MANHNT** |
+|:-------------|:-----------|
+| Subscriptions & paywalled modes | **Free forever** |
+| Closed source | **Apache 2.0** — fork it |
+| Live-track every second (jittery pins) | **Timed reveals** + **frozen pins** |
+| GPS “too far” blocking real tags | **Code / QR** when you’re there |
+| Accounts required | **Anonymous** Firebase only |
 
 ---
 
-## The game in 30 seconds
+## The loop
 
-```text
-  HOST creates room ──► friends join with 6-letter code
-           │
-           ▼
-     roles assigned (Seeker / Runner)
-           │
-           ▼
-   head start → runners scatter
-           │
-           ▼
-  every 2–5 min: location REVEAL (snapshot → frozen pin)
-           │
-           ▼
-  seeker finds runner → enter 4-digit code (or show QR)
-           │
-           ├─ all caught  → Seekers win
-           └─ timer ends  → Runners win
+```
+┌──────────┐     ┌──────────┐     ┌──────────────┐     ┌────────────┐
+│  CREATE  │ ──► │   JOIN   │ ──► │  HEAD START  │ ──► │   HUNT     │
+│   room   │     │ 6-letter │     │ runners run  │     │ reveals +  │
+└──────────┘     └──────────┘     └──────────────┘     │   tags     │
+                                                       └─────┬──────┘
+                                                             │
+                              ┌──────────────────────────────┴───────┐
+                              ▼                                      ▼
+                    all runners caught                      timer hits zero
+                         SEEKERS WIN                         RUNNERS WIN
 ```
 
-| | **Seeker** | **Runner (Hider)** |
-|---|------------|---------------------|
-| **Map** | Frozen reveal pins + own live GPS | Own position + zone; not a live enemy tracker |
-| **Clues** | Auto-ping reveals, optional BLE “nearby” | Compass toward nearest seeker |
-| **Tag** | Type their catch code | Show code or QR only when tagged |
-| **Win** | Catch everyone | Survive the clock / free jail |
+| | Seeker | Runner |
+|:--|:-------|:-------|
+| **Map** | Frozen reveal pins + live self | Own GPS + zone |
+| **Clues** | Auto-ping · optional BLE nearby | Compass to nearest seeker |
+| **Tag** | Enter 4-digit code | Show code or QR |
+| **Win** | Catch everyone | Survive / jailbreak |
 
 ---
 
 ## Features
 
-<details open>
-<summary><strong>Match & map</strong></summary>
+### Match & map
 
-- Anonymous Firebase rooms with live roster & session state
-- Play zones: **1 km · 2 km · unlimited** · optional **shrinking** zone
-- **Head start**, **safe zones**, **jail + jailbreak**, **stealth** (45s hide / 3 min cooldown)
-- **Auto-ping reveals** (2 / 5 min) → pins **freeze locally** until the next ping
-- OSM maps, compass strip, proximity **haptics**
-- Foreground GPS service + battery-optimization helpers
-- OLED-friendly dark UI, appearance presets, local match history
+- Anonymous Firebase rooms · live roster & session
+- Zones: **1 km · 2 km · unlimited** · optional shrinking
+- Head start · safe zones · jail + jailbreak · stealth
+- **Auto-ping reveals** (2 / 5 min) → pins **freeze** until next ping
+- OSM maps · compass · proximity haptics
+- Foreground GPS · battery-exemption helpers
+- OLED dark UI · appearance presets · local match history
 
-</details>
-
-<details open>
-<summary><strong>Catch & connectivity</strong></summary>
+### Catch & connectivity
 
 | Piece | Role |
-|-------|------|
+|:------|:-----|
 | **4-digit code** | Primary tag proof |
-| **QR** | Same proof, shown on runner’s screen (`QrCodeUtil` + ZXing) |
-| **Bluetooth LE** | Optional “someone nearby” assist — **never required to tag** |
-| **Firebase** | Match brain: roster, caught flags, timer, **FINISHED**, results |
+| **QR** | Same proof on the runner’s screen |
+| **Bluetooth LE** | Optional “nearby” only — never required |
+| **Firebase** | Roster · caught · timer · `FINISHED` · results |
 
-- No distance gate on the catch button
-- Host validates code → all clients follow `session.status == FINISHED`
-- Game over when **all runners caught** or **timer hits zero**
+No distance gate on catch. Host validates code. Game ends when everyone is caught or the clock hits zero.
 
-</details>
+### Engineering
 
-<details>
-<summary><strong>Engineering</strong></summary>
-
-- Kotlin · Jetpack Compose · Material 3
-- OSMDroid · Fused Location · Room · DataStore
-- Retrofit → Firebase Realtime Database REST
-- GitHub Actions: structure checks, Android compile, rules tests
-- Vector adaptive launcher icon
-
-</details>
+Kotlin · Jetpack Compose · Material 3 · OSMDroid · Fused Location · Room · DataStore · Retrofit → Firebase RTDB · GitHub Actions CI · vector adaptive icon
 
 ---
 
 ## How to play
 
-1. **Prep** — GPS on, mobile data on, Bluetooth optional  
-2. **Host** — Create room → set duration, zone, head start, auto-ping → share code  
-3. **Join** — Everyone enters the code; host assigns Seeker / Runner  
-4. **Start** — Head start ends; seekers hunt  
-5. **Reveal** — On each ping, runner positions snapshot onto the map (frozen until next)  
-6. **Tag** — Face-to-face: enter their **4-digit code** (they can flash the QR)  
-7. **Jail** (if on) — Caught runners go to jail; a free runner can jailbreak the group  
-8. **End** — All caught → seekers win · time up with anyone free → runners win  
+| Step | What happens |
+|:----:|:-------------|
+| **1** | GPS on · data on · Bluetooth optional |
+| **2** | Host creates room · sets duration / zone / head start / auto-ping · shares code |
+| **3** | Everyone joins · host assigns Seeker / Runner |
+| **4** | Match starts · head start ends · hunt begins |
+| **5** | Each ping: runner positions snapshot onto the map (frozen until next) |
+| **6** | Tag = enter their **4-digit code** (they can show QR) |
+| **7** | Jail (if on): free runners can jailbreak the group |
+| **8** | All caught → seekers · time up with anyone free → runners |
 
 > Stay off roads. Respect private property. Don’t be reckless.
 
@@ -127,94 +135,83 @@ Built for parks, campuses, and city blocks — not for microtransactions.
 
 ## Build
 
-**Need:** Android Studio (Hedgehog+), **JDK 17**, SDK **34**
+**Requires** Android Studio (Hedgehog+) · **JDK 17** · SDK **34**
 
 ```bash
 git clone https://github.com/dedsec-1337/MANHNT.git
 cd MANHNT
 ```
 
-Open the **`android/`** folder in Android Studio → **Sync Gradle** → **Run**.
-
-Or ship a release APK:
+Open **`android/`** in Android Studio → **Sync Gradle** → **Run**.
 
 ```text
-Build → Generate Signed Bundle / APK → APK → release
-→ android/app/build/outputs/apk/release/app-release.apk
+Release APK
+  Build → Generate Signed Bundle / APK → APK → release
+  → android/app/build/outputs/apk/release/app-release.apk
 ```
 
 <details>
-<summary>Gradle download timeout?</summary>
+<summary><b>Gradle download timeout?</b></summary>
 
-If you see `SocketTimeoutException` fetching `gradle-8.6-bin.zip`:
+<br/>
 
-1. Retry / switch network or VPN  
-2. Or download manually: [gradle-8.6-bin.zip](https://services.gradle.org/distributions/gradle-8.6-bin.zip) into your Gradle wrapper dists cache  
+If `SocketTimeoutException` appears while fetching `gradle-8.6-bin.zip`:
+
+1. Retry or switch network / VPN  
+2. Manual zip: [gradle-8.6-bin.zip](https://services.gradle.org/distributions/gradle-8.6-bin.zip) → drop into the Gradle wrapper dists cache  
 
 </details>
 
-### Firebase setup
+### Firebase
 
 1. Enable **Anonymous Authentication**  
-2. Set the Realtime Database URL in  
-   `android/app/src/main/java/com/manhunt/app/data/Constants.kt`  
-3. Publish **secure** rules (never `read/write: true` for the world)  
-   — start from `firebase/database.rules.example.json` if present  
+2. Set RTDB URL in `android/app/src/main/java/com/manhunt/app/data/Constants.kt`  
+3. Publish **secure** rules — never world-open `read` / `write`  
 
-**BLE, QR, frozen pins, and ungated catch do not require new rules** — they are client-side. Catch still uses the existing attempt / ack paths.
+BLE · QR · frozen pins · ungated catch need **no new rules** (client-side). Catch still uses existing attempt / ack paths.
 
 ---
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│  Jetpack Compose UI  ·  GameScreen · Lobby · Results    │
-├─────────────────────────────────────────────────────────┤
-│  GameViewModel  ·  session state · catch · reveals      │
-├──────────────┬──────────────────┬───────────────────────┤
-│  OSMDroid    │  Fused Location  │  BLE Nearby (optional)│
-│  map + pins │  foreground svc  │  advertise / scan     │
-├──────────────┴──────────────────┴───────────────────────┤
-│  FirebaseSyncService (REST)  ·  Anonymous Auth          │
-│  rooms · publicPlayers · catch · signals                │
-├─────────────────────────────────────────────────────────┤
-│  Room (history)  ·  DataStore (appearance)              │
-└─────────────────────────────────────────────────────────┘
+```
+┌──────────────────────────────────────────────────────────┐
+│  Compose UI · GameScreen · Lobby · Results               │
+├──────────────────────────────────────────────────────────┤
+│  GameViewModel · session · catch · reveals               │
+├───────────────┬──────────────────┬───────────────────────┤
+│  OSMDroid     │  Fused Location  │  BLE Nearby (opt.)    │
+│  map + pins  │  foreground svc  │  advertise / scan     │
+├───────────────┴──────────────────┴───────────────────────┤
+│  FirebaseSyncService (REST) · Anonymous Auth             │
+├──────────────────────────────────────────────────────────┤
+│  Room (history) · DataStore (appearance)                 │
+└──────────────────────────────────────────────────────────┘
 ```
 
-| Concern | Implementation |
-|---------|----------------|
-| UI | Kotlin, Jetpack Compose |
-| Map | OSMDroid + frozen reveal overlays |
-| Sync | Retrofit → Firebase RTDB REST |
-| Tag proof | Code + QR (ZXing); BLE assist only |
-| Local | Room, DataStore |
-
----
-
-## Project layout
-
-```text
+```
 MANHNT/
-├── android/                 ← open this in Android Studio
-│   ├── app/src/main/java/com/manhunt/app/
-│   │   ├── ui/              screens & components
-│   │   ├── viewmodel/       GameViewModel
-│   │   ├── network/         Firebase sync
-│   │   ├── util/            Geo, QR, BLE helpers
-│   │   └── service/         location foreground service
-│   └── app/build.gradle.kts
-├── firebase/                rules examples (if present)
+├── android/          ← open in Android Studio
+│   └── app/src/main/java/com/manhunt/app/
+│       ├── ui/
+│       ├── viewmodel/
+│       ├── network/
+│       ├── util/
+│       └── service/
 ├── CHANGELOG.md
+├── RELEASE_NOTES_1.0.0.md
 └── README.md
 ```
 
 ---
 
-## Changelog
+## Docs
 
-See **[CHANGELOG.md](CHANGELOG.md)** — latest: **v1.1.0** (frozen reveals, QR, BLE nearby, ungated catch).
+| Doc | Contents |
+|:----|:---------|
+| [CHANGELOG.md](CHANGELOG.md) | Full version history (Keep a Changelog) |
+| [RELEASE_NOTES_1.0.0.md](RELEASE_NOTES_1.0.0.md) | Player-facing 1.0.0 notes |
+| [RELEASE_NOTES.md](RELEASE_NOTES.md) | Version index |
 
 ---
 
@@ -230,10 +227,7 @@ Issues and PRs welcome. Prefer small, focused changes. Keep CI green (`check.yml
 
 ---
 
-<div align="center">
-
-**Play outside. Stay off roads. Don’t be an idiot.**
-
-`git clone` · build · hunt
-
-</div>
+<p align="center">
+  <sub>Play outside. Stay off roads. Don’t be an idiot.</sub><br/><br/>
+  <code>git clone</code> · build · hunt
+</p>
