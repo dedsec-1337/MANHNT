@@ -1,1 +1,1 @@
-RESTORE_FROM_ARTIFACTS
+@/home/workdir/artifacts/GameViewModel.kt
