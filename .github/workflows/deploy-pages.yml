@@ -21,17 +21,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
-          # No package-lock.json in repo (bun.lock only) — skip cache
+          bun-version: latest
 
       - name: Install
-        run: npm install
+        run: bun install --frozen-lockfile || bun install
 
       - name: Build
-        run: npm run build
+        run: bun run build
+
+      - name: Verify dist
+        run: |
+          test -f dist/index.html
+          # Built HTML must reference hashed assets, not /src/main.tsx
+          if grep -q '/src/main.tsx' dist/index.html; then
+            echo "Build still points at source main.tsx" >&2
+            exit 1
+          fi
+          ls -la dist
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
