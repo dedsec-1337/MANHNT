@@ -73,6 +73,9 @@ class MainActivity : ComponentActivity() {
             val uiState by viewModel.uiState.collectAsState()
             var selectedTab by rememberSaveable { mutableStateOf(AppTab.HUNT) }
             var transientDestination by rememberSaveable { mutableStateOf<TransientDestination?>(null) }
+            // Persist as a name so it survives process death; a plain `remember` reset to null after
+            // recreation, which made the effect below treat a live match as "just ended" and stop
+            // the location service.
             var previousStatusName by rememberSaveable { mutableStateOf<String?>(null) }
             val previousStatus = previousStatusName?.let { name ->
                 runCatching { GameStatus.valueOf(name) }.getOrNull()
@@ -90,6 +93,7 @@ class MainActivity : ComponentActivity() {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 add(Manifest.permission.POST_NOTIFICATIONS)
                             }
+                            // Optional BLE nearby assist (Android 12+)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                 add(Manifest.permission.BLUETOOTH_SCAN)
                                 add(Manifest.permission.BLUETOOTH_ADVERTISE)
@@ -119,6 +123,9 @@ class MainActivity : ComponentActivity() {
 
                     LaunchedEffect(uiState.session?.status, hasLocationPermission) {
                         val currentStatus = uiState.session?.status
+                        // A saved transient destination can outlive the session it belonged to (for
+                        // example, process death restores RESULTS while no session exists). Results
+                        // renders nothing without a session, which showed as a black screen.
                         if (uiState.session == null && transientDestination == TransientDestination.RESULTS) {
                             transientDestination = null
                         }
@@ -177,6 +184,8 @@ class MainActivity : ComponentActivity() {
 
                     val activeMatch = uiState.session?.status == GameStatus.RUNNING ||
                         uiState.session?.status == GameStatus.PAUSED
+                    // CREATE_ROOM is valid with no session (that's how you open the create flow).
+                    // RESULTS still requires a finished session or it paints a black screen.
                     val resolvedTransientDestination = when {
                         transientDestination == TransientDestination.CREATE_ROOM ->
                             TransientDestination.CREATE_ROOM
@@ -216,6 +225,7 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .padding(contentPadding)
                         ) {
+                            // Keep the live map composed underneath other tabs so its state survives tab changes.
                             if (activeMatch) {
                                 GameScreen(
                                     state = uiState,
@@ -267,7 +277,7 @@ class MainActivity : ComponentActivity() {
                                 when (destination) {
                                     RootDestination.HUNT -> {
                                         if (activeMatch) {
-                                            Box(modifier.fillMaxSize())
+                                            Box(Modifier.fillMaxSize())
                                         } else {
                                             HomeScreen(
                                                 state = uiState,
@@ -339,17 +349,15 @@ class MainActivity : ComponentActivity() {
                                     RootDestination.CREATE_ROOM -> CreateRoomScreen(
                                         isCreatingRoom = uiState.isCreatingRoom,
                                         onBackClick = { transientDestination = null },
-                                        onCreateClick = { name, duration, zone, headStart, shrinking, autoPing, safeZones, lat, lng ->
+                                        onCreateRoomSubmit = { name, duration, zonePreset, headStart, shrinking, autoPing, safeZones ->
                                             viewModel.createRoom(
                                                 roomName = name,
                                                 durationMinutes = duration,
-                                                zoneSizePreset = zone,
+                                                zoneSizePreset = zonePreset,
                                                 headStartMinutes = headStart,
                                                 isShrinkingZoneEnabled = shrinking,
                                                 autoPingIntervalMinutes = autoPing,
-                                                safeZones = safeZones,
-                                                centerLat = lat,
-                                                centerLng = lng
+                                                safeZones = safeZones
                                             ) { success ->
                                                 if (success) {
                                                     transientDestination = null
