@@ -17,6 +17,7 @@ import com.manhunt.app.util.GeoUtils
 import com.manhunt.app.util.GeofenceManager
 import com.manhunt.app.util.GeofenceStatus
 import com.manhunt.app.util.HapticFeedbackManager
+import com.manhunt.app.util.BleNearbyAssist
 import com.manhunt.app.util.RandomCode
 import com.google.firebase.auth.FirebaseAuth
 import com.google.android.gms.location.LocationServices
@@ -68,6 +69,8 @@ data class GameUiState(
     val canJailbreak: Boolean = false,
     val jailbreakHoldProgress: Int = 0,
     val huntersNearJail: List<Player> = emptyList(),
+    val nearbyBlePlayerIds: List<String> = emptyList(),
+    val bleStatusMessage: String? = null,
     /** Last reveal snapshots for map pins (frozen until next auto-ping). */
     val frozenRevealLocations: Map<String, LocationRevealSnapshot> = emptyMap(),
     val lastRevealEpochMs: Long = 0L,
@@ -87,6 +90,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val firebaseSync = FirebaseSyncService.instance
     private val compass = CompassSensorManager(application)
     private val hapticManager = HapticFeedbackManager(application)
+    private val bleAssist = BleNearbyAssist(application.applicationContext)
     private val settingsPreferences = application.getSharedPreferences("manhunt_settings", Context.MODE_PRIVATE)
     private val _uiState = MutableStateFlow(
         GameUiState(appearanceSettings = loadAppearanceSettings())
@@ -166,6 +170,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             while (isActive) {
                 delay(1000)
                 refreshStealthState()
+            }
+        }
+
+        viewModelScope.launch {
+            bleAssist.nearbyPlayers.collect { list ->
+                _uiState.update { it.copy(nearbyBlePlayerIds = list.map { n -> n.playerId }) }
+            }
+        }
+        viewModelScope.launch {
+            bleAssist.statusMessage.collect { msg ->
+                _uiState.update { it.copy(bleStatusMessage = msg) }
+            }
+        }
+        viewModelScope.launch {
+            while (isActive) {
+                delay(3000)
+                bleAssist.pruneStale()
+                syncBleMode()
             }
         }
         refreshBatteryOptimizationStatus()
@@ -1168,6 +1190,32 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+
+    /** BLE assist: hiders advertise, seekers scan. Never required for a successful tag. */
+    private fun syncBleMode() {
+        val state = _uiState.value
+        val session = state.session
+        if (session == null || session.status != GameStatus.RUNNING || session.isPaused) {
+            bleAssist.stopAll()
+            return
+        }
+        val me = state.myPlayer
+        when (me.role) {
+            Role.HIDER -> {
+                if (!me.isCaught && !me.isInJail) {
+                    bleAssist.stopScanning()
+                    bleAssist.startAdvertising(session.joinCode, me.id)
+                } else {
+                    bleAssist.stopAll()
+                }
+            }
+            Role.SEEKER -> {
+                bleAssist.stopAdvertising()
+                bleAssist.startScanning(session.joinCode)
+            }
+        }
+    }
+
     private fun endGame(winner: Role) {
         val s = _uiState.value.session ?: return
         countdownTimerJob?.cancel()
@@ -1179,6 +1227,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        bleAssist.stopAll()
         super.onCleared()
         countdownTimerJob?.cancel()
         compass.stopListening()
