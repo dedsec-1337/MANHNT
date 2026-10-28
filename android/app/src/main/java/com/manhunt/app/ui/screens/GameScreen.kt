@@ -275,7 +275,36 @@ fun GameScreen(
                 }
             }
 
-            // C. Safe Zone Shield Alert (Hider inside Safe Zone)
+            // B2. Bluetooth nearby assist (optional — does not replace code/QR tag)
+            if (state.myPlayer.role == Role.SEEKER && state.nearbyBlePlayerIds.isNotEmpty()) {
+                val names = state.players
+                    .filter { it.id in state.nearbyBlePlayerIds && it.role == Role.HIDER && !it.isCaught }
+                    .joinToString { it.name }
+                    .ifBlank { "${state.nearbyBlePlayerIds.size} runner(s)" }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF0EA5E9),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.Bluetooth, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "NEARBY (Bluetooth): $names — open Tag and enter their code",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            } else if (state.bleStatusMessage != null && state.myPlayer.role == Role.SEEKER) {
+                // Soft status only when no detections yet
+            }
+
+                        // C. Safe Zone Shield Alert (Hider inside Safe Zone)
             if (state.isInSafeZone) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
