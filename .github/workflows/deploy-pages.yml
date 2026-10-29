@@ -21,12 +21,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare site
+      - name: Assemble website assets
         run: |
-          test -f website/index.html
-          test -f website/og-image.png
-          test -f website/apple-touch-icon.png
-          ls -la website/
+          set -e
+          cd website
+          cat index.part1.html index.part2.html > index.html
+          base64 -d apple-touch-icon.png.b64 > apple-touch-icon.png
+          base64 -d og-image.jpg.b64 > og-image.jpg
+          test -s index.html
+          test -s apple-touch-icon.png
+          test -s og-image.jpg
+          test -f logo-mark.svg
+          ls -la
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
