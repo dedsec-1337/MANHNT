@@ -21,31 +21,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install
-        run: bun install --frozen-lockfile || bun install
-
-      - name: Build
-        run: bun run build
-
-      - name: Verify dist
+      - name: Prepare site
         run: |
-          test -f dist/index.html
-          # Built HTML must reference hashed assets, not /src/main.tsx
-          if grep -q '/src/main.tsx' dist/index.html; then
-            echo "Build still points at source main.tsx" >&2
-            exit 1
-          fi
-          ls -la dist
+          test -f website/index.html
+          test -f website/og-image.png
+          test -f website/apple-touch-icon.png
+          ls -la website/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: website
 
   deploy:
     needs: build
