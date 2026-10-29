@@ -15,9 +15,11 @@
   <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/Compose-UI-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-0B5FFF?style=flat-square" alt="License" /></a>
   <a href="https://github.com/dedsec-1337/MANHNT/actions"><img src="https://img.shields.io/github/actions/workflow/status/dedsec-1337/MANHNT/check.yml?branch=main&style=flat-square&label=CI" alt="CI" /></a>
+  <a href="https://dedsec-1337.github.io/MANHNT/"><img src="https://img.shields.io/badge/Website-live-6EE7D1?style=flat-square&logo=githubpages&logoColor=white" alt="Website" /></a>
 </p>
 
 <p align="center">
+  <a href="https://dedsec-1337.github.io/MANHNT/"><strong>Website</strong></a> ·
   <a href="#features">Features</a> ·
   <a href="#how-to-play">How to play</a> ·
   <a href="#build">Build</a> ·
@@ -198,6 +200,7 @@ MANHNT/
 │       ├── network/
 │       ├── util/
 │       └── service/
+├── website/          ← marketing site (GitHub Pages)
 ├── CHANGELOG.md
 ├── RELEASE_NOTES_1.0.0.md
 └── README.md
@@ -209,6 +212,7 @@ MANHNT/
 
 | Doc | Contents |
 |:----|:---------|
+| [**Website**](https://dedsec-1337.github.io/MANHNT/) | Product landing page |
 | [CHANGELOG.md](CHANGELOG.md) | Full version history (Keep a Changelog) |
 | [RELEASE_NOTES_1.0.0.md](RELEASE_NOTES_1.0.0.md) | Player-facing 1.0.0 notes |
 | [RELEASE_NOTES.md](RELEASE_NOTES.md) | Version index |
