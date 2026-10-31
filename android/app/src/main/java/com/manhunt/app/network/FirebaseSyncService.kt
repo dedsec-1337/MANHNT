@@ -262,12 +262,10 @@ class FirebaseSyncService private constructor() {
             }
             val publicPlayers = playersResponse.body().orEmpty()
             val locationResponse = api.getLocations(joinCode)
-            if (!locationResponse.isSuccessful) {
+            val locations = if (locationResponse.isSuccessful) locationResponse.body().orEmpty() else {
                 Log.w(TAG, "Get private locations response code: ${locationResponse.code()}")
-                _syncStatus.value = NetworkSyncStatus.OFFLINE
-                return null
+                emptyMap()
             }
-            val locations = locationResponse.body().orEmpty()
             val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
             val catchCodes = if (uid == session.hostPlayerId) {
                 val codesResponse = api.getCatchCodes(joinCode)
@@ -292,7 +290,8 @@ class FirebaseSyncService private constructor() {
                         nowEpochMs - signal.timestampEpochMs <= Constants.GAME_SIGNAL_MAX_AGE_MS
                 }
             } else {
-                emptyMap()
+                Log.w(TAG, "Get game signals response code: ${signalsResponse.code()}")
+                _roomSignals.value
             }
             val mergedPlayers = publicPlayers.mapValues { (playerId, player) ->
                 val location = locations[playerId]
@@ -502,16 +501,21 @@ class FirebaseSyncService private constructor() {
     }
 
     /**
-     * Submits a catch attempt to Firebase
+     * Submits a catch attempt to Firebase.
+     * @return HTTP status, or 0 when the request never completed.
+     * A 200 means the database rules accepted the code (they reject a mismatch).
      */
-    suspend fun sendCatchAttempt(joinCode: String, attempt: CatchAttemptPayload): Boolean {
+    suspend fun sendCatchAttempt(joinCode: String, attempt: CatchAttemptPayload): Int {
         return withContext(Dispatchers.IO) {
             try {
                 val response = api.putCatchAttempt(joinCode, attempt)
-                response.isSuccessful
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Catch attempt rejected: HTTP ${response.code()}")
+                }
+                response.code()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to put catch attempt: ${e.message}")
-                false
+                0
             }
         }
     }

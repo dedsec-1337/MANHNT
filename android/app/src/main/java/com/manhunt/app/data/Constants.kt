@@ -9,7 +9,7 @@ object Constants {
     // Allow a bit more slack: write every 5s + poll every 2.5s + phone GPS jitter.
     const val MAX_LOCATION_AGE_MS = 30_000L
     const val MAX_LOCATION_FUTURE_SKEW_MS = 5_000L
-    const val GAME_SIGNAL_MAX_AGE_MS = 15_000L
+    const val GAME_SIGNAL_MAX_AGE_MS = 30_000L
     const val GAME_SIGNAL_MAX_FUTURE_SKEW_MS = 5_000L
     const val GAME_SIGNAL_SEND_COOLDOWN_MS = 1_500L
 

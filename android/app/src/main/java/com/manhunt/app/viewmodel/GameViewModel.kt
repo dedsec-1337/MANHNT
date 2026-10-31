@@ -162,7 +162,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { firebaseSync.roomState.collect { if (it != null) applyRoom(it) } }
         viewModelScope.launch {
             firebaseSync.roomSignals.collect { signals ->
+                val previous = _uiState.value.roomSignals
                 _uiState.update { it.copy(roomSignals = signals) }
+                val newest = signals.maxByOrNull { it.value.timestampEpochMs } ?: return@collect
+                val previousStamp = previous[newest.key]?.timestampEpochMs ?: 0L
+                if (newest.value.timestampEpochMs <= previousStamp) return@collect
+                if (newest.key == _uiState.value.myPlayer.id) return@collect
+                val sender = _uiState.value.players.firstOrNull { it.id == newest.key }?.name ?: "Player"
+                _uiState.update { it.copy(toastMessage = "$sender: ${signalText(newest.value.code)}") }
             }
         }
         viewModelScope.launch { firebaseSync.syncStatus.collect { s -> _uiState.update { it.copy(networkStatus = s) } } }
@@ -497,15 +504,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            val submitted = firebaseSync.sendCatchAttempt(s.joinCode, CatchAttemptPayload(me.id, targetHiderId, enteredCode.trim()))
-            if (submitted) {
-                _uiState.update {
-                    it.copy(toastMessage = "Tag submitted — confirming…")
+            val attempt = CatchAttemptPayload(
+                seekerId = me.id,
+                targetHiderId = targetHiderId,
+                enteredCode = enteredCode.trim()
+            )
+            val statusCode = firebaseSync.sendCatchAttempt(s.joinCode, attempt)
+            when (statusCode) {
+                in 200..299 -> {
+                    _uiState.update { it.copy(toastMessage = "Tag sent — confirming…") }
+                    if (_uiState.value.isOrganizer) {
+                        catchAttemptInFlightTimestamp = attempt.timestamp
+                        processCatchAttempt(attempt)
+                    }
+                    onResult(true, "Catch code sent")
                 }
-                onResult(true, "Catch code sent")
-            } else {
-                _uiState.update { it.copy(toastMessage = "Catch attempt could not sync. Check the code, connection, and room rules.") }
-                onResult(false, "Catch attempt rejected")
+                401, 403 -> {
+                    _uiState.update {
+                        it.copy(toastMessage = "Tag refused. Wrong code, or Firebase rules are out of date.")
+                    }
+                    onResult(false, "Catch attempt rejected")
+                }
+                else -> {
+                    _uiState.update {
+                        it.copy(toastMessage = "Catch attempt could not sync. Check connection and room rules.")
+                    }
+                    onResult(false, "Catch attempt rejected")
+                }
             }
         }
     }
@@ -731,6 +756,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun clearToast() { _uiState.update { it.copy(toastMessage = null) } }
     fun dismissToast() = clearToast()
 
+    private fun signalText(code: String): String = when (code) {
+        GameSignalCode.REACTION_LAUGH -> "😂  Laugh"
+        GameSignalCode.REACTION_EYES -> "👀  Eyes on you"
+        GameSignalCode.REACTION_CLAP -> "👏  Clap"
+        GameSignalCode.REACTION_FIRE -> "🔥  Let's go!"
+        GameSignalCode.PHRASE_CATCH_ME -> "🏃  Catch me if you can!"
+        GameSignalCode.PHRASE_CLOSE_CALL -> "😅  That was close!"
+        GameSignalCode.PHRASE_WARMER -> "👀  You're getting warmer…"
+        GameSignalCode.PHRASE_NEED_RESCUE -> "🆘  Need a rescue!"
+        GameSignalCode.PHRASE_GG -> "🏁  GG — nice chase!"
+        else -> code
+    }
+
     fun sendQuickSignal(code: String) {
         val state = _uiState.value
         val session = state.session ?: return
@@ -746,12 +784,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val sent = firebaseSync.sendQuickSignal(session.joinCode, state.myPlayer.id, signal)
-            if (!sent) {
-                lastQuickSignalSentAtEpochMs = 0L
-                _uiState.update {
-                    it.copy(toastMessage = "Signal could not sync. Check your connection and try again.")
-                }
+            val meName = state.myPlayer.name.ifBlank { "You" }
+            _uiState.update {
+                it.copy(toastMessage = if (sent) {
+                    "$meName: ${signalText(code)}"
+                } else {
+                    "Signal could not sync. Check connection and Firebase rules."
+                })
             }
+            if (!sent) lastQuickSignalSentAtEpochMs = 0L
         }
     }
 
@@ -781,6 +822,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 lastUpdatedEpochMs = localMe.lastUpdatedEpochMs
             )
             else -> serverMe
+        }.let { resolved ->
+            if (resolved.catchCode.isBlank() && localMe.catchCode.length == 4) {
+                resolved.copy(catchCode = localMe.catchCode)
+            } else {
+                resolved
+            }
         }
         val session = room.session
         val now = System.currentTimeMillis()
@@ -1103,12 +1150,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     GeoUtils.hasValidCoordinates(zone.latitude, zone.longitude) &&
                         GeoUtils.distanceMeters(target.latitude, target.longitude, zone.latitude, zone.longitude) <= zone.radiusMeters
                 }
-                // Distance is not enforced — catch code is the real-world tag proof.
-                if (targetInSafeZone ||
-                    target.catchCode.trim() != attempt.enteredCode.trim()
-                ) {
+                // Rules already rejected a mismatched code at write time. Re-read the private code
+                // anyway so an empty in-memory copy cannot reject a tag the server just accepted.
+                val serverCode = firebaseSync.fetchCatchCode(session.joinCode, attempt.targetHiderId)
+                    ?.trim()
+                    .orEmpty()
+                val knownCode = serverCode.ifBlank { target.catchCode.trim() }
+                if (targetInSafeZone || knownCode.length != 4 || knownCode != attempt.enteredCode.trim()) {
                     lastHandledCatchAttemptTimestamp = attempt.timestamp
                     ack(false)
+                    _uiState.update {
+                        it.copy(toastMessage = when {
+                            targetInSafeZone -> "Catch rejected — safe zone"
+                            knownCode.length != 4 -> "Runner has no catch code. Host must reassign their role."
+                            else -> "Catch rejected — wrong code"
+                        })
+                    }
                     return@launch
                 }
 
