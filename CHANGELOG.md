@@ -7,6 +7,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Fixed
+- **Tag / catch code never finishing a match** — the host now saves a confirmed tag with a field-level update instead of rewriting the whole Hider record, which was refused whenever the host's local copy of the private catch code was blank. Catch codes are also cached so one failed poll cannot blank them.
+- **Seeker could only ever tag the first Hider in the list** — with two or more Hiders the tag sheet now asks which Hider was tagged, so the code is checked against the right runner.
+- **Seeker could not tag without a fresh GPS fix** — tagging is code-proven, so the Tag button no longer depends on the Seeker's own location.
+- **Quick chat did not appear on other phones** — messages are stamped with Firebase's clock (`.sv: timestamp`), shown once per new message, and no longer dropped when phone clocks disagree. Senders see their own message only after Firebase accepts it, and get the HTTP reason if it does not.
+- **Host restart froze the match clock** — the host's countdown resumes from the server value; the final "match finished" write is retried.
+- Seekers now learn a tag succeeded from the Hider's public flag as well as the host's acknowledgement, and are told when the host never answers.
+- Stale catch attempts/acks are ignored after a restart; attempt age check widened to tolerate phone clock differences.
+
+### Added
+- `firebase/tests/offline-flow.cjs` — replays the app's real calls against the rules file without the emulator (`npm run test:rules:offline`).
+
 ### Planned
 - Optional camera-based QR scan for seekers (hider QR display already ships)
 - Further launcher icon polish (full wordmark where adaptive safe-zone allows)

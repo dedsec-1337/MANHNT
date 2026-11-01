@@ -26,11 +26,16 @@ import com.manhunt.app.ui.theme.*
 @Composable
 fun CatchBottomSheet(
     targetHider: Player,
+    candidates: List<Player> = listOf(targetHider),
     onDismiss: () -> Unit,
-    onSubmitCatchCode: (String) -> Unit
+    onSubmitCatchCode: (hiderId: String, code: String) -> Unit
 ) {
     var code by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    // Every Hider has their own code. With more than one Hider in play the seeker has to say which
+    // one they tagged, otherwise a correct code for Hider B is checked against Hider A and fails.
+    var selectedId by remember(targetHider.id) { mutableStateOf(targetHider.id) }
+    val selected = candidates.firstOrNull { it.id == selectedId } ?: targetHider
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -46,18 +51,57 @@ fun CatchBottomSheet(
         ) {
             // Header
             Text(
-                text = "Catch ${targetHider.name}!",
+                text = "Catch ${selected.name}!",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = AppleTextPrimary
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Ask ${targetHider.name} for the 4-digit code shown on their screen.",
+                text = "Ask ${selected.name} for the 4-digit code shown on their screen.",
                 fontSize = 14.sp,
                 color = AppleTextSecondary,
                 textAlign = TextAlign.Center
             )
+
+            if (candidates.size > 1) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = "Who did you tag?",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppleTextSecondary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Column(
+                    modifier = Modifier.fillMaxWidth(0.85f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    candidates.forEach { candidate ->
+                        val isSelected = candidate.id == selected.id
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    selectedId = candidate.id
+                                    code = ""
+                                    errorMessage = null
+                                },
+                            color = if (isSelected) AppleSeekerOrange.copy(alpha = 0.22f) else AppleFill,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = "${candidate.avatarEmoji}  ${candidate.name}",
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                fontSize = 15.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = AppleTextPrimary
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -153,7 +197,7 @@ fun CatchBottomSheet(
                 backgroundColor = AppleSeekerOrange,
                 onClick = {
                     if (code.length == 4) {
-                        onSubmitCatchCode(code)
+                        onSubmitCatchCode(selected.id, code)
                     }
                 }
             )

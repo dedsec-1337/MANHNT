@@ -33,12 +33,22 @@ import java.util.UUID
 
 /** Coordinates local gameplay state with Firebase room sync, location, and match mechanics. */
 
+/** A chat/reaction currently shown on screen (display timing is local, never clock based). */
+data class ActiveSignal(
+    val playerId: String,
+    val senderName: String,
+    val code: String,
+    val receivedAtEpochMs: Long
+)
+
 data class GameUiState(
     val myPlayer: Player = Player(id = UUID.randomUUID().toString(), name = "Runner", avatarEmoji = "🏃"),
     val latestMatch: MatchHistoryEntity? = null,
     val session: GameSession? = null,
     val players: List<Player> = emptyList(),
     val roomSignals: Map<String, GameSignalPayload> = emptyMap(),
+    val activeSignal: ActiveSignal? = null,
+    val catchableHiders: List<Player> = emptyList(),
     val isOrganizer: Boolean = false,
     val hasCompassHeading: Boolean = false,
     val nearestSeekerDistance: Double = -1.0,
@@ -84,6 +94,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         const val PREFERENCE_HIGH_REFRESH_RATE = "high_refresh_rate_enabled"
         const val PREFERENCE_ACTIVE_JOIN_CODE = "active_join_code"
         const val PREFERENCE_ACTIVE_ROLE = "active_role"
+        // A catch attempt older/newer than this (host clock vs seeker clock) is treated as stale.
+        const val CATCH_ATTEMPT_WINDOW_MS = 120_000L
+        // How long a seeker waits for the host to answer before being told to retry.
+        const val CATCH_REPLY_TIMEOUT_MS = 12_000L
+        const val SIGNAL_BANNER_MS = 6_000L
     }
 
     private val db = (application as ManhuntApp).database
@@ -106,6 +121,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var lastHandledCatchAttemptTimestamp: Long = 0L
     private var catchAttemptInFlightTimestamp: Long = 0L
     private var lastCatchAckTimestamp: Long = 0L
+    private var catchBaselineSet = false
+    private var endingMatch = false
+    private var awaitingCatchAttemptTs: Long = 0L
+    private val lastSeenSignalStamp = mutableMapOf<String, Long>()
+    private var signalClearJob: Job? = null
     private val handledStealthRequests = mutableMapOf<String, Long>()
     private val handledStealthExpiries = mutableMapOf<String, Long>()
     private var wasAutoPingActive: Boolean = false
@@ -162,14 +182,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { firebaseSync.roomState.collect { if (it != null) applyRoom(it) } }
         viewModelScope.launch {
             firebaseSync.roomSignals.collect { signals ->
-                val previous = _uiState.value.roomSignals
                 _uiState.update { it.copy(roomSignals = signals) }
-                val newest = signals.maxByOrNull { it.value.timestampEpochMs } ?: return@collect
-                val previousStamp = previous[newest.key]?.timestampEpochMs ?: 0L
-                if (newest.value.timestampEpochMs <= previousStamp) return@collect
-                if (newest.key == _uiState.value.myPlayer.id) return@collect
-                val sender = _uiState.value.players.firstOrNull { it.id == newest.key }?.name ?: "Player"
-                _uiState.update { it.copy(toastMessage = "$sender: ${signalText(newest.value.code)}") }
+                handleIncomingSignals(signals)
             }
         }
         viewModelScope.launch { firebaseSync.syncStatus.collect { s -> _uiState.update { it.copy(networkStatus = s) } } }
@@ -407,6 +421,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             autoPingRemainingSeconds = 0
         )
         startGameInFlight = true
+        endingMatch = false
         viewModelScope.launch {
             try {
                 val started = firebaseSync.updateSession(
@@ -441,8 +456,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         disputesRemaining = 2
                     )
                 }
+                // PATCH only the match flags. A full PUT is refused for Hiders whose private catch
+                // code is not in memory, which silently left earlier "caught" flags in place.
                 for (player in clearedPlayers) {
-                    firebaseSync.joinPlayer(session.joinCode, player)
+                    firebaseSync.patchPlayer(
+                        session.joinCode,
+                        player.id,
+                        mapOf(
+                            "isCaught" to false,
+                            "isInJail" to false,
+                            "isStealthActive" to false,
+                            "stealthUntilEpochMs" to 0L,
+                            "stealthActivationRequestedAtEpochMs" to 0L,
+                            "stealthCooldownUntilEpochMs" to 0L,
+                            "immunityUntilEpochMs" to 0L,
+                            "jailbreakHoldStartedAtEpochMs" to 0L,
+                            "disputesRemaining" to 2
+                        )
+                    )
                 }
                 _uiState.update { current ->
                     if (current.session?.joinCode != session.joinCode || !current.isOrganizer) {
@@ -512,22 +543,35 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val statusCode = firebaseSync.sendCatchAttempt(s.joinCode, attempt)
             when (statusCode) {
                 in 200..299 -> {
-                    _uiState.update { it.copy(toastMessage = "Tag sent — confirming…") }
+                    _uiState.update { it.copy(toastMessage = "Code accepted — confirming tag…") }
                     if (_uiState.value.isOrganizer) {
                         catchAttemptInFlightTimestamp = attempt.timestamp
                         processCatchAttempt(attempt)
+                    } else {
+                        // The host's phone validates and finalizes the tag. If nothing comes back,
+                        // say so instead of leaving the seeker staring at a running game.
+                        awaitingCatchAttemptTs = attempt.timestamp
+                        viewModelScope.launch {
+                            delay(CATCH_REPLY_TIMEOUT_MS)
+                            if (awaitingCatchAttemptTs == attempt.timestamp) {
+                                awaitingCatchAttemptTs = 0L
+                                _uiState.update {
+                                    it.copy(toastMessage = "No answer from the host yet. The host's app must stay open. Try the tag again.")
+                                }
+                            }
+                        }
                     }
                     onResult(true, "Catch code sent")
                 }
                 401, 403 -> {
                     _uiState.update {
-                        it.copy(toastMessage = "Tag refused. Wrong code, or Firebase rules are out of date.")
+                        it.copy(toastMessage = "Tag refused (HTTP $statusCode). The code does not match this runner, or the Firebase rules are out of date.")
                     }
                     onResult(false, "Catch attempt rejected")
                 }
                 else -> {
                     _uiState.update {
-                        it.copy(toastMessage = "Catch attempt could not sync. Check connection and room rules.")
+                        it.copy(toastMessage = if (statusCode == 0) "No connection — tag not sent." else "Tag could not sync (HTTP $statusCode).")
                     }
                     onResult(false, "Catch attempt rejected")
                 }
@@ -675,7 +719,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_uiState.value.isOrganizer) return
         viewModelScope.launch {
             _uiState.value.players.filter { it.role == Role.HIDER && it.isInJail }.forEach { p ->
-                firebaseSync.joinPlayer(s.joinCode, p.copy(isCaught = false, isInJail = false, immunityUntilEpochMs = immunity))
+                firebaseSync.patchPlayer(
+                    s.joinCode,
+                    p.id,
+                    mapOf("isCaught" to false, "isInJail" to false, "immunityUntilEpochMs" to immunity)
+                )
             }
             firebaseSync.updateSession(s.joinCode, mapOf("isJailbreakInProgress" to false, "jailbreakProgressSeconds" to 0))
             hapticManager.triggerJailbreakAlarm()
@@ -742,6 +790,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun leaveGame() {
         countdownTimerJob?.cancel()
+        signalClearJob?.cancel()
+        lastSeenSignalStamp.clear()
+        catchBaselineSet = false
+        awaitingCatchAttemptTs = 0L
         clearPersistedActiveRoom()
         if (jailbreakJob?.isActive == true) {
             jailbreakJob?.cancel()
@@ -750,7 +802,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val session = _uiState.value.session
         val playerId = _uiState.value.myPlayer.id
         if (session != null) viewModelScope.launch { firebaseSync.leaveRoom(session.joinCode, playerId) } else firebaseSync.stopSync()
-        _uiState.update { it.copy(session = null, players = emptyList(), isOrganizer = false, isJoiningRoom = false, isCreatingRoom = false, canJailbreak = false, isInJail = false) }
+        _uiState.update { it.copy(session = null, players = emptyList(), isOrganizer = false, isJoiningRoom = false, isCreatingRoom = false, canJailbreak = false, isInJail = false, activeSignal = null, catchableHiders = emptyList(), nearbyCatchableHider = null) }
     }
     fun leaveRoom() = leaveGame()
     fun clearToast() { _uiState.update { it.copy(toastMessage = null) } }
@@ -772,27 +824,79 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun sendQuickSignal(code: String) {
         val state = _uiState.value
         val session = state.session ?: return
-        if (code !in GameSignalCode.allowedCodes ||
-            session.status != GameStatus.RUNNING ||
-            session.isPaused
-        ) return
+        if (code !in GameSignalCode.allowedCodes) return
+        if (session.status != GameStatus.RUNNING || session.isPaused) {
+            _uiState.update { it.copy(toastMessage = "Chat works only while the match is running.") }
+            return
+        }
 
         val nowEpochMs = System.currentTimeMillis()
         if (nowEpochMs - lastQuickSignalSentAtEpochMs < Constants.GAME_SIGNAL_SEND_COOLDOWN_MS) return
         lastQuickSignalSentAtEpochMs = nowEpochMs
-        val signal = GameSignalPayload(code = code, timestampEpochMs = nowEpochMs)
+        val myId = state.myPlayer.id
 
         viewModelScope.launch {
-            val sent = firebaseSync.sendQuickSignal(session.joinCode, state.myPlayer.id, signal)
-            val meName = state.myPlayer.name.ifBlank { "You" }
-            _uiState.update {
-                it.copy(toastMessage = if (sent) {
-                    "$meName: ${signalText(code)}"
-                } else {
-                    "Signal could not sync. Check connection and Firebase rules."
-                })
+            val status = firebaseSync.sendQuickSignal(session.joinCode, myId, code)
+            if (status in 200..299) {
+                // Sender sees their own message immediately; everyone else gets it on their next poll.
+                showSignal(myId, "You", code, toast = false)
+            } else {
+                lastQuickSignalSentAtEpochMs = 0L
+                _uiState.update {
+                    it.copy(
+                        toastMessage = when (status) {
+                            401, 403 -> "Chat blocked by database rules (HTTP $status). Publish the latest rules from the repo's firebase folder."
+                            0 -> "Chat not sent — no connection."
+                            else -> "Chat could not sync (HTTP $status)."
+                        }
+                    )
+                }
             }
-            if (!sent) lastQuickSignalSentAtEpochMs = 0L
+        }
+    }
+
+    /**
+     * Shows each new message once. "New" means the sender's timestamp changed since we last saw it,
+     * which does not depend on this phone's clock matching the sender's clock.
+     */
+    private fun handleIncomingSignals(signals: Map<String, GameSignalPayload>) {
+        val state = _uiState.value
+        if (state.session == null) {
+            lastSeenSignalStamp.clear()
+            return
+        }
+        val myId = state.myPlayer.id
+        var newest: Pair<String, GameSignalPayload>? = null
+        for ((playerId, signal) in signals) {
+            val previous = lastSeenSignalStamp[playerId]
+            if (previous == signal.timestampEpochMs) continue
+            lastSeenSignalStamp[playerId] = signal.timestampEpochMs
+            if (playerId == myId) continue
+            val currentNewest = newest
+            if (currentNewest == null || signal.timestampEpochMs > currentNewest.second.timestampEpochMs) {
+                newest = playerId to signal
+            }
+        }
+        val fresh = newest ?: return
+        val senderName = state.players.firstOrNull { it.id == fresh.first }?.name
+            ?.takeIf { it.isNotBlank() } ?: "Player"
+        showSignal(fresh.first, senderName, fresh.second.code, toast = true)
+    }
+
+    private fun showSignal(playerId: String, senderName: String, code: String, toast: Boolean) {
+        val shownAt = System.currentTimeMillis()
+        _uiState.update {
+            it.copy(
+                activeSignal = ActiveSignal(playerId, senderName, code, shownAt),
+                toastMessage = if (toast) "$senderName: ${signalText(code)}" else it.toastMessage
+            )
+        }
+        signalClearJob?.cancel()
+        signalClearJob = viewModelScope.launch {
+            delay(SIGNAL_BANNER_MS)
+            _uiState.update { cur ->
+                if (cur.activeSignal?.receivedAtEpochMs == shownAt) cur.copy(activeSignal = null) else cur
+            }
         }
     }
 
@@ -869,11 +973,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         recalculateDistancesAndProximity()
         val attempt = room.lastCatchAttempt
-        if (attempt != null && attempt.timestamp > lastHandledCatchAttemptTimestamp) {
+        if (!catchBaselineSet) {
+            // First snapshot after joining or restarting: whatever attempt/ack is already stored
+            // belongs to the past. Without this a restarted host replays an old tag.
+            catchBaselineSet = true
+            if (attempt != null) {
+                lastHandledCatchAttemptTimestamp = maxOf(lastHandledCatchAttemptTimestamp, attempt.timestamp)
+            }
+            room.catchAck?.let { lastCatchAckTimestamp = maxOf(lastCatchAckTimestamp, it.timestamp) }
+        } else if (attempt != null && attempt.timestamp > lastHandledCatchAttemptTimestamp) {
             if (state.isOrganizer && catchAttemptInFlightTimestamp != attempt.timestamp) {
                 catchAttemptInFlightTimestamp = attempt.timestamp
                 processCatchAttempt(attempt)
             }
+        }
+        // The host's timer only starts in startGame(). If the host app was restarted mid-match the
+        // clock stayed frozen and the match never ended, so resume it from the server's value.
+        if (state.isOrganizer && session.status == GameStatus.RUNNING && !session.isPaused &&
+            !endingMatch && countdownTimerJob?.isActive != true
+        ) {
+            startCountdown()
         }
         // `lastCatchAttempt` is host-readable only, so a non-host Seeker learns the outcome from the
         // per-seeker ack node the host writes after validation.
@@ -907,9 +1026,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         wasAutoPingActive = pingActive
 
+        var confirmedForMe = false
         val ack = room.catchAck
         if (ack != null && ack.seekerId == me.id && ack.timestamp > lastCatchAckTimestamp) {
             lastCatchAckTimestamp = ack.timestamp
+            if (ack.timestamp == awaitingCatchAttemptTs) awaitingCatchAttemptTs = 0L
+            confirmedForMe = true
             _uiState.update {
                 it.copy(
                     toastMessage = if (ack.accepted) {
@@ -920,6 +1042,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             if (ack.accepted) hapticManager.triggerCatchConfirmation()
+        }
+        // A catch is also visible as the Hider's public flag flipping to caught. Using that as a
+        // second signal means seekers still learn the result if the ack write is ever blocked.
+        if (session.status == GameStatus.RUNNING && state.players.isNotEmpty()) {
+            val previouslyFree = state.players
+                .filter { it.role == Role.HIDER && !it.isCaught }
+                .map { it.id }
+                .toSet()
+            val newlyCaught = room.players.values.filter {
+                it.role == Role.HIDER && it.isCaught && it.id in previouslyFree && it.id != me.id
+            }
+            if (newlyCaught.isNotEmpty()) {
+                val names = newlyCaught.joinToString { it.name.ifBlank { "Hider" } }
+                if (awaitingCatchAttemptTs != 0L && me.role == Role.SEEKER) {
+                    awaitingCatchAttemptTs = 0L
+                    hapticManager.triggerCatchConfirmation()
+                    if (!confirmedForMe) _uiState.update { it.copy(toastMessage = "Catch confirmed: $names") }
+                } else if (!confirmedForMe) {
+                    _uiState.update { it.copy(toastMessage = "$names was caught") }
+                }
+            }
         }
         if (state.isOrganizer) {
             room.players.values.filter { it.stealthActivationRequestedAtEpochMs > 0L }
@@ -981,6 +1124,36 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         recalculateDistancesAndProximity()
     }
 
+    private data class SeekerTargets(
+        val catchable: Player?,
+        val allCatchable: List<Player>,
+        val safeZoneNotice: String?
+    )
+
+    /**
+     * Which Hiders can be tagged right now. Tagging is proven by the private catch code, not by
+     * distance or by this phone's GPS, so this must not depend on the Seeker having a fresh fix.
+     */
+    private fun seekerTargets(state: GameUiState, others: List<Player>): SeekerTargets {
+        val session = state.session
+        val hiders = others.filter { it.role == Role.HIDER && !it.isCaught && !it.isInJail }
+        fun isActuallyInSafeZone(player: Player): Boolean = session?.safeZones?.any { zone ->
+            GeoUtils.hasValidCoordinates(zone.latitude, zone.longitude) &&
+                GeoUtils.hasValidCoordinates(player.latitude, player.longitude) &&
+                GeoUtils.distanceMeters(player.latitude, player.longitude, zone.latitude, zone.longitude) <= zone.radiusMeters
+        } == true
+        val now = System.currentTimeMillis()
+        val allCatchable = hiders.filter { !isActuallyInSafeZone(it) && it.immunityUntilEpochMs <= now }
+        val protectedHider = hiders.firstOrNull { isActuallyInSafeZone(it) }
+        return SeekerTargets(
+            catchable = allCatchable.firstOrNull(),
+            allCatchable = allCatchable,
+            safeZoneNotice = protectedHider?.let { h ->
+                "${h.name} is protected in ${h.safeZoneName?.takeIf { name -> name.isNotBlank() } ?: "Safe Zone"}!"
+            }
+        )
+    }
+
     private fun recalculateDistancesAndProximity() {
         val state = _uiState.value
         val me = state.myPlayer
@@ -995,12 +1168,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             !GeoUtils.isLocationRecent(me.lastUpdatedEpochMs)
         ) {
             hapticManager.stop()
+            val targets = if (me.role == Role.SEEKER) seekerTargets(state, others) else null
             _uiState.update {
                 it.copy(
                     nearestSeekerDistance = -1.0,
                     nearestSeekerBearing = 0f,
-                    nearbyCatchableHider = null,
-                    safeZoneNotice = null
+                    nearbyCatchableHider = targets?.catchable,
+                    catchableHiders = targets?.allCatchable.orEmpty(),
+                    safeZoneNotice = targets?.safeZoneNotice
                 )
             }
             return
@@ -1028,30 +1203,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(
                     nearestSeekerDistance = distance,
                     nearestSeekerBearing = bearing,
-                    nearbyCatchableHider = null
+                    nearbyCatchableHider = null,
+                    catchableHiders = emptyList()
                 )
             }
         } else {
-            val session = state.session
-            val hiders = others.filter {
-                it.role == Role.HIDER && !it.isCaught
-            }
-            fun isActuallyInSafeZone(player: Player): Boolean = session?.safeZones?.any { zone ->
-                GeoUtils.hasValidCoordinates(zone.latitude, zone.longitude) &&
-                    GeoUtils.hasValidCoordinates(player.latitude, player.longitude) &&
-                    GeoUtils.distanceMeters(player.latitude, player.longitude, zone.latitude, zone.longitude) <= zone.radiusMeters
-            } == true
             // No distance gate: any free, non-immune, non-safe-zone hider can be tagged by code.
-            val catchable = hiders.firstOrNull { hider ->
-                !isActuallyInSafeZone(hider) && hider.immunityUntilEpochMs <= System.currentTimeMillis()
-            }
-            val protected = hiders.firstOrNull { isActuallyInSafeZone(it) }
+            val targets = seekerTargets(state, others)
             _uiState.update {
                 it.copy(
-                    nearbyCatchableHider = catchable,
-                    safeZoneNotice = protected?.let {
-                        h -> "${h.name} is protected in ${h.safeZoneName?.takeIf { name -> name.isNotBlank() } ?: "Safe Zone"}!"
-                    }
+                    nearbyCatchableHider = targets.catchable,
+                    catchableHiders = targets.allCatchable,
+                    safeZoneNotice = targets.safeZoneNotice
                 )
             }
         }
@@ -1108,6 +1271,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun processCatchAttempt(attempt: CatchAttemptPayload) {
+        // Mark as taken straight away so the 2.5 s poll cannot start a second run for the same tag.
+        lastHandledCatchAttemptTimestamp = maxOf(lastHandledCatchAttemptTimestamp, attempt.timestamp)
         viewModelScope.launch {
             try {
                 val state = _uiState.value
@@ -1115,8 +1280,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val now = System.currentTimeMillis()
                 val targetName = state.players.firstOrNull { it.id == attempt.targetHiderId }?.name.orEmpty()
                 suspend fun ack(accepted: Boolean) {
-                    firebaseSync.publishCatchAck(
-                        session?.joinCode ?: return,
+                    val joinCode = session?.joinCode ?: return
+                    val status = firebaseSync.publishCatchAck(
+                        joinCode,
                         CatchAckPayload(
                             seekerId = attempt.seekerId,
                             targetHiderId = attempt.targetHiderId,
@@ -1125,11 +1291,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                             timestamp = attempt.timestamp
                         )
                     )
+                    if (status !in 200..299) {
+                        _uiState.update {
+                            it.copy(toastMessage = "Catch result could not reach the seeker (HTTP $status). Publish the latest Firebase rules.")
+                        }
+                    }
                 }
-                if (!state.isOrganizer || session == null || session.status != GameStatus.RUNNING || session.isPaused || session.headStartRemainingSeconds > 0 ||
-                    attempt.timestamp > now + 5_000L || now - attempt.timestamp > 30_000L
+                // Compare with a wide window: the seeker's phone clock and the host's can differ.
+                if (!state.isOrganizer || session == null || session.status != GameStatus.RUNNING || session.isPaused ||
+                    session.headStartRemainingSeconds > 0 ||
+                    attempt.timestamp > now + CATCH_ATTEMPT_WINDOW_MS || now - attempt.timestamp > CATCH_ATTEMPT_WINDOW_MS
                 ) {
-                    lastHandledCatchAttemptTimestamp = attempt.timestamp
                     return@launch
                 }
 
@@ -1141,7 +1313,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     target.isCaught || target.isInJail || target.immunityUntilEpochMs > now ||
                     seeker.id == target.id
                 ) {
-                    lastHandledCatchAttemptTimestamp = attempt.timestamp
                     ack(false)
                     return@launch
                 }
@@ -1157,7 +1328,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     .orEmpty()
                 val knownCode = serverCode.ifBlank { target.catchCode.trim() }
                 if (targetInSafeZone || knownCode.length != 4 || knownCode != attempt.enteredCode.trim()) {
-                    lastHandledCatchAttemptTimestamp = attempt.timestamp
                     ack(false)
                     _uiState.update {
                         it.copy(toastMessage = when {
@@ -1176,13 +1346,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     isInJail = sendToJail,
                     isStealthActive = false
                 )
-                if (!firebaseSync.joinPlayer(session.joinCode, caught)) {
-                    _uiState.update { it.copy(toastMessage = "Catch could not sync. Check the host connection.") }
+                // PATCH just the catch flags. The old full-record PUT was refused whenever the host's
+                // local copy of the Hider's private code was blank, so a valid tag never saved.
+                val saved = firebaseSync.patchPlayer(
+                    session.joinCode,
+                    target.id,
+                    mapOf("isCaught" to true, "isInJail" to sendToJail, "isStealthActive" to false)
+                )
+                if (!saved) {
+                    _uiState.update { it.copy(toastMessage = "Catch could not be saved. Check the host connection and try the tag again.") }
                     ack(false)
                     return@launch
                 }
 
-                lastHandledCatchAttemptTimestamp = attempt.timestamp
                 ack(true)
                 _uiState.update { current ->
                     current.copy(
@@ -1310,10 +1486,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun endGame(winner: Role) {
         val s = _uiState.value.session ?: return
+        endingMatch = true
         countdownTimerJob?.cancel()
         val catches = _uiState.value.players.count { it.role == Role.HIDER && it.isCaught }
         viewModelScope.launch {
-            firebaseSync.updateSession(s.joinCode, mapOf("status" to GameStatus.FINISHED.name, "winnerRole" to winner.name, "totalCatches" to catches))
+            // Retry: if this single write is lost the server keeps saying RUNNING and the next poll
+            // drags every phone back into a match that should already be over.
+            var saved = false
+            var tries = 0
+            while (!saved && tries < 5) {
+                saved = firebaseSync.updateSession(
+                    s.joinCode,
+                    mapOf("status" to GameStatus.FINISHED.name, "winnerRole" to winner.name, "totalCatches" to catches)
+                )
+                tries++
+                if (!saved) delay(1_500)
+            }
+            if (!saved) {
+                _uiState.update { it.copy(toastMessage = "Match result could not be saved. Check the host connection.") }
+            }
             db.matchHistoryDao().insertMatch(MatchHistoryEntity(joinCode = s.joinCode, rolePlayed = _uiState.value.myPlayer.role.name, isWin = _uiState.value.myPlayer.role == winner, durationSeconds = (s.durationMinutes * 60) - s.remainingSeconds, catchesCount = catches))
         }
     }

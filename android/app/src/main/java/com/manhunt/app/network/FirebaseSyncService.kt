@@ -156,11 +156,13 @@ interface FirebaseRestApi {
         @Path("joinCode") joinCode: String
     ): Response<Map<String, GameSignalPayload>?>
 
+    // The timestamp is sent as {".sv":"timestamp"} so Firebase stamps it with its own clock.
+    // Phone clocks that disagree by a few seconds can then never make the rules reject a message.
     @PUT("roomSignals/{joinCode}/{playerId}.json")
     suspend fun putGameSignal(
         @Path("joinCode") joinCode: String,
         @Path("playerId") playerId: String,
-        @Body signal: GameSignalPayload
+        @Body signal: Map<String, @JvmSuppressWildcards Any>
     ): Response<Void>
 
     @DELETE("roomSignals/{joinCode}/{playerId}.json")
@@ -188,6 +190,10 @@ class FirebaseSyncService private constructor() {
 
     private var pollingJob: Job? = null
     private var activeJoinCode: String? = null
+
+    // Last catch codes successfully read from Firebase. A single failed poll must never blank them,
+    // otherwise the host cannot confirm a tag and the game keeps running.
+    @Volatile private var catchCodeCache: Map<String, String> = emptyMap()
 
     init {
         val logging = HttpLoggingInterceptor().apply {
@@ -224,6 +230,7 @@ class FirebaseSyncService private constructor() {
      * Polls Firebase REST every 2.5 seconds to receive latest GPS positions and game events.
      */
     fun startRoomSync(joinCode: String) {
+        if (activeJoinCode != joinCode) catchCodeCache = emptyMap()
         activeJoinCode = joinCode
         pollingJob?.cancel()
         pollingJob = scope.launch {
@@ -267,27 +274,38 @@ class FirebaseSyncService private constructor() {
                 emptyMap()
             }
             val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-            val catchCodes = if (uid == session.hostPlayerId) {
+            val catchCodes: Map<String, String> = if (uid == session.hostPlayerId) {
                 val codesResponse = api.getCatchCodes(joinCode)
-                if (codesResponse.isSuccessful) codesResponse.body().orEmpty() else {
+                if (codesResponse.isSuccessful) {
+                    codesResponse.body().orEmpty().also { catchCodeCache = it }
+                } else {
                     Log.w(TAG, "Get host catch codes response code: ${codesResponse.code()}")
-                    emptyMap()
+                    catchCodeCache
                 }
             } else {
                 val codeResponse = api.getCatchCode(joinCode, uid)
-                if (codeResponse.isSuccessful) mapOf(uid to (codeResponse.body() ?: "")) else emptyMap()
+                if (codeResponse.isSuccessful) {
+                    mapOf(uid to (codeResponse.body() ?: "")).also { catchCodeCache = it }
+                } else {
+                    Log.w(TAG, "Get own catch code response code: ${codeResponse.code()}")
+                    catchCodeCache
+                }
             }
             val lastCatchResponse = api.getLastCatchAttempt(joinCode)
             val pendingResponse = api.getPendingCatchConfirm(joinCode)
             val catchAckResponse = if (uid.isNotEmpty()) api.getCatchAck(joinCode, uid) else null
             val signalsResponse = api.getGameSignals(joinCode)
-            val nowEpochMs = System.currentTimeMillis()
+            // Message timestamps come from Firebase's clock, so compare them with Firebase's clock
+            // (the HTTP Date header) instead of this phone's clock. Falls back to the phone clock.
+            val serverNowEpochMs = signalsResponse.headers().getDate("Date")?.time
+                ?: System.currentTimeMillis()
             val activeSignals = if (signalsResponse.isSuccessful) {
                 signalsResponse.body().orEmpty().filterValues { signal ->
+                    val ageMs = serverNowEpochMs - signal.timestampEpochMs
                     signal.code in GameSignalCode.allowedCodes &&
                         signal.timestampEpochMs > 0L &&
-                        signal.timestampEpochMs <= nowEpochMs + Constants.GAME_SIGNAL_MAX_FUTURE_SKEW_MS &&
-                        nowEpochMs - signal.timestampEpochMs <= Constants.GAME_SIGNAL_MAX_AGE_MS
+                        ageMs >= -Constants.GAME_SIGNAL_MAX_FUTURE_SKEW_MS &&
+                        ageMs <= Constants.GAME_SIGNAL_MAX_AGE_MS
                 }
             } else {
                 Log.w(TAG, "Get game signals response code: ${signalsResponse.code()}")
@@ -429,14 +447,21 @@ class FirebaseSyncService private constructor() {
         }
     }
 
-    /** Host-only: publishes the catch outcome to the seeker's own acknowledgement node. */
-    suspend fun publishCatchAck(joinCode: String, ack: CatchAckPayload): Boolean {
+    /**
+     * Host-only: publishes the catch outcome to the seeker's own acknowledgement node.
+     * @return HTTP status, or 0 when the request never completed.
+     */
+    suspend fun publishCatchAck(joinCode: String, ack: CatchAckPayload): Int {
         return withContext(Dispatchers.IO) {
             try {
-                api.putCatchAck(joinCode, ack.seekerId, ack).isSuccessful
+                val response = api.putCatchAck(joinCode, ack.seekerId, ack)
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Catch ack rejected: HTTP ${response.code()}")
+                }
+                response.code()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to publish catch ack: ${e.message}")
-                false
+                0
             }
         }
     }
@@ -520,28 +545,27 @@ class FirebaseSyncService private constructor() {
         }
     }
 
-    suspend fun sendQuickSignal(
-        joinCode: String,
-        playerId: String,
-        signal: GameSignalPayload
-    ): Boolean {
-        val nowEpochMs = System.currentTimeMillis()
-        if (signal.code !in GameSignalCode.allowedCodes ||
-            signal.timestampEpochMs <= 0L ||
-            signal.timestampEpochMs > nowEpochMs + Constants.GAME_SIGNAL_MAX_FUTURE_SKEW_MS ||
-            nowEpochMs - signal.timestampEpochMs > Constants.GAME_SIGNAL_MAX_AGE_MS
-        ) return false
-
+    /**
+     * Sends a preset chat/reaction signal.
+     * @return HTTP status, or 0 when the request never completed. 401/403 means the database
+     * rules in the Firebase console do not include the roomSignals block (publish the latest rules).
+     */
+    suspend fun sendQuickSignal(joinCode: String, playerId: String, code: String): Int {
+        if (code !in GameSignalCode.allowedCodes) return 0
         return withContext(Dispatchers.IO) {
             try {
-                val response = api.putGameSignal(joinCode, playerId, signal)
-                if (response.isSuccessful) {
-                    _roomSignals.value = _roomSignals.value + (playerId to signal)
+                val body: Map<String, Any> = mapOf(
+                    "code" to code,
+                    "timestampEpochMs" to mapOf(".sv" to "timestamp")
+                )
+                val response = api.putGameSignal(joinCode, playerId, body)
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "Quick signal rejected: HTTP ${response.code()}")
                 }
-                response.isSuccessful
+                response.code()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send quick signal: ${e.message}")
-                false
+                0
             }
         }
     }
@@ -598,6 +622,7 @@ class FirebaseSyncService private constructor() {
     fun stopSync() {
         pollingJob?.cancel()
         activeJoinCode = null
+        catchCodeCache = emptyMap()
         _roomState.value = null
         _roomSignals.value = emptyMap()
     }

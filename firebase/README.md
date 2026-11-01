@@ -8,6 +8,17 @@
 
 For automated rules checks, run `npm install` and `npm run test:rules` from this directory. The test command starts the Realtime Database Emulator and checks representative allowed and denied operations. These tests do not publish rules to your live Firebase project.
 
+## Publishing the rules (required after every rules change)
+
+The app can only work if the rules **published in the Firebase console** match `database.rules.example.json`.
+Editing this file in GitHub does not change the live database.
+
+1. Firebase console → your project → **Build → Realtime Database → Rules** tab.
+2. Select everything in the editor, paste the full contents of `database.rules.example.json`, click **Publish**.
+3. Quick check that the live rules are current: press Ctrl+F in the editor and confirm both `roomSignals` and `catchAcks` appear. Missing `roomSignals` = quick chat is blocked; missing `catchAcks` = seekers never receive the host's catch result.
+
+Offline check of the rules file against the app's real call sequence: `npm install` then `npm run test:rules:offline`.
+
 ## Security notes
 
 - Do not grant `.write: auth != null` at `/rooms/$joinCode`. Realtime Database rules cascade, so a broad parent write grant bypasses narrower child rules.

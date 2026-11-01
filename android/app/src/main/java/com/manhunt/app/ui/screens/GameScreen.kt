@@ -78,8 +78,9 @@ fun GameScreen(
     var recentSignalFeedback by remember { mutableStateOf<String?>(null) }
 
     fun sendSignal(option: QuickSignalOption) {
+        // Confirmation (or the failure reason) now comes from the view model once Firebase answers,
+        // so this screen no longer claims "sent" before the message has actually gone out.
         onSendQuickSignal(option.code)
-        recentSignalFeedback = option.emoji + "  " + option.text
     }
 
     LaunchedEffect(recentSignalFeedback) {
@@ -89,17 +90,13 @@ fun GameScreen(
         }
     }
 
-    val latestSignal = state.roomSignals.maxByOrNull { it.value.timestampEpochMs }
-    val signalAgeMs = latestSignal?.let { System.currentTimeMillis() - it.value.timestampEpochMs }
-    val activeSignal = latestSignal?.takeIf {
-        signalAgeMs != null && signalAgeMs in -Constants.GAME_SIGNAL_MAX_FUTURE_SKEW_MS..Constants.GAME_SIGNAL_MAX_AGE_MS
-    }
-    val signalOption = activeSignal?.value?.code?.let { code ->
+    // The view model decides when a message is new and for how long it stays on screen, so a phone
+    // whose clock differs from the sender's can no longer hide it.
+    val activeSignal = state.activeSignal
+    val signalOption = activeSignal?.code?.let { code ->
         (REACTION_OPTIONS + QUICK_CHAT_OPTIONS).firstOrNull { it.code == code }
     }
-    val signalSenderName = activeSignal?.key?.let { playerId ->
-        state.players.firstOrNull { it.id == playerId }?.name
-    } ?: "Player"
+    val signalSenderName = activeSignal?.senderName ?: "Player"
     val canSendSignals = session.status == com.manhunt.app.data.model.GameStatus.RUNNING && !session.isPaused
 
     val remaining = session.remainingSeconds
@@ -680,6 +677,7 @@ fun GameScreen(
                 val buttonText = when {
                     state.isSeekerFrozen -> "Frozen: Waiting for Head Start"
                     isTargetInSafeZone -> "Target in Safe Zone (${catchable?.safeZoneName ?: "Base"})"
+                    state.catchableHiders.size > 1 -> "⚡ Tag a Hider (${state.catchableHiders.size} free)"
                     catchable != null -> "⚡ Tag ${catchable.name}"
                     else -> "Tag a Hider"
                 }
@@ -769,10 +767,11 @@ fun GameScreen(
         showCatchSheetForHider?.let { hider ->
             CatchBottomSheet(
                 targetHider = hider,
+                candidates = state.catchableHiders.ifEmpty { listOf(hider) },
                 onDismiss = { showCatchSheetForHider = null },
-                onSubmitCatchCode = { enteredPin ->
+                onSubmitCatchCode = { hiderId, enteredPin ->
                     showCatchSheetForHider = null
-                    onAttemptCatch(hider.id, enteredPin)
+                    onAttemptCatch(hiderId, enteredPin)
                 }
             )
         }
