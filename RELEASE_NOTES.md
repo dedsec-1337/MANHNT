@@ -4,7 +4,8 @@ Latest detailed notes by version:
 
 | Version | Date | Notes |
 |---------|------|--------|
-| **1.1.0** | 2026-10-28 | Frozen reveals, QR, BLE nearby — see [CHANGELOG.md](CHANGELOG.md) |
+| **1.2.0** | 2026-11-01 | Tag and quick-chat fixes — **[RELEASE_NOTES_1.2.0.md](RELEASE_NOTES_1.2.0.md)** |
+| 1.1.0 | 2026-10-28 | Frozen reveals, QR, BLE nearby — see [CHANGELOG.md](CHANGELOG.md) |
 | **1.0.0** | 2026-10-26 | [RELEASE_NOTES_1.0.0.md](RELEASE_NOTES_1.0.0.md) |
 | 0.9.0 | 2026-10-25 | Core loop (rooms, zone, jail, stealth) |
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/MANHNT-v1.1.0-0D1117?style=for-the-badge&labelColor=161B22&color=3DDC84" alt="MANHNT" />
+  <img src="https://img.shields.io/badge/MANHNT-v1.2.0-0D1117?style=for-the-badge&labelColor=161B22&color=3DDC84" alt="MANHNT" />
 </p>
 
 <h1 align="center">MANHNT</h1>

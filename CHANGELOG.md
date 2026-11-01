@@ -7,6 +7,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Planned
+- Optional camera-based QR scan for seekers (hider QR display already ships)
+- Further launcher icon polish (full wordmark where adaptive safe-zone allows)
+- Field-test polish for BLE reliability across OEMs
+
+## [1.2.0] - 2026-11-01
+
 ### Fixed
 - **Tag / catch code never finishing a match** — the host now saves a confirmed tag with a field-level update instead of rewriting the whole Hider record, which was refused whenever the host's local copy of the private catch code was blank. Catch codes are also cached so one failed poll cannot blank them.
 - **Seeker could only ever tag the first Hider in the list** — with two or more Hiders the tag sheet now asks which Hider was tagged, so the code is checked against the right runner.
@@ -16,13 +23,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 - Seekers now learn a tag succeeded from the Hider's public flag as well as the host's acknowledgement, and are told when the host never answers.
 - Stale catch attempts/acks are ignored after a restart; attempt age check widened to tolerate phone clock differences.
 
+### Changed
+- App version is now **1.2.0** (`versionCode` 2). `build.gradle.kts` still said 1.0.0 / code 1.
+- GitHub Actions now keeps the debug APK as a downloadable artifact on every successful run.
+
 ### Added
 - `firebase/tests/offline-flow.cjs` — replays the app's real calls against the rules file without the emulator (`npm run test:rules:offline`).
-
-### Planned
-- Optional camera-based QR scan for seekers (hider QR display already ships)
-- Further launcher icon polish (full wordmark where adaptive safe-zone allows)
-- Field-test polish for BLE reliability across OEMs
 
 ## [1.1.0] - 2026-10-28
 
@@ -81,7 +87,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ---
 
-[Unreleased]: https://github.com/dedsec-1337/MANHNT/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/dedsec-1337/MANHNT/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/dedsec-1337/MANHNT/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dedsec-1337/MANHNT/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/dedsec-1337/MANHNT/releases/tag/v1.0.0
 [0.9.0]: https://github.com/dedsec-1337/MANHNT/releases/tag/v0.9.0
