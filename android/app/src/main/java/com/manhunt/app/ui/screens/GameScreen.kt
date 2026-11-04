@@ -768,7 +768,7 @@ fun GameScreen(
             CatchBottomSheet(
                 targetHider = hider,
                 candidates = state.catchableHiders.ifEmpty { listOf(hider) },
-                roomJoinCode = state.session?.joinCode.orEmpty(),
+                roomJoinCode = session.joinCode,
                 onDismiss = { showCatchSheetForHider = null },
                 onSubmitCatchCode = { hiderId, enteredPin ->
                     showCatchSheetForHider = null
