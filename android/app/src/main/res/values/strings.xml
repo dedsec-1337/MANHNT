@@ -2,4 +2,15 @@
     <string name="app_name">MANHNT</string>
     <string name="location_service_channel_name">MANHNT Active Chase</string>
     <string name="location_service_channel_desc">Maintains high-accuracy GPS tracking during live manhunt matches.</string>
+    <string name="scan_qr_button">Scan QR code</string>
+    <string name="scan_enter_code_instead">Enter code instead</string>
+    <string name="scan_hint">Point the camera at the Hider\u2019s QR code.</string>
+    <string name="scan_camera_description">Camera viewfinder. Point it at the Hider\u2019s QR code.</string>
+    <string name="scan_permission_title">Camera access needed</string>
+    <string name="scan_permission_body">MANHNT uses the camera only to read the Hider\u2019s QR code. Nothing is recorded or uploaded. You can always type the code instead.</string>
+    <string name="scan_permission_allow">Allow camera</string>
+    <string name="scan_permission_settings">Open settings</string>
+    <string name="scan_not_manhnt">That is not a MANHNT QR code.</string>
+    <string name="scan_wrong_room">That QR code is for a different room.</string>
+    <string name="scan_not_catchable">That runner cannot be tagged right now.</string>
 </resources>

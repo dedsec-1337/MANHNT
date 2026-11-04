@@ -7,8 +7,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added
+- **QR scanning for Seekers** — the tag sheet has a "Scan QR code" button that reads the Hider's QR (CameraX + ZXing, decoded on-device, nothing recorded or uploaded). It requests the camera only when tapped, explains why, and offers an "Open settings" recovery if denied. Typing the 4-digit code still works everywhere. A wrong-room or non-catchable QR is rejected with a message. The QR format is now parsed by `CatchQrPayload` (unit-tested).
+
 ### Planned
-- Optional camera-based QR scan for seekers (hider QR display already ships)
 - Further launcher icon polish (full wordmark where adaptive safe-zone allows)
 - Field-test polish for BLE reliability across OEMs
 

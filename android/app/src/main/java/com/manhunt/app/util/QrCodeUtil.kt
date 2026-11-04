@@ -8,11 +8,11 @@ import com.google.zxing.qrcode.QRCodeWriter
 
 /**
  * Local tag proof helpers — encode catch payload as QR for face-to-face verification.
- * Format: MANHNT|<joinCode>|<playerId>|<catchCode>
+ * Format (see [CatchQrPayload], which also parses it): MANHNT|<joinCode>|<playerId>|<catchCode>
  */
 object QrCodeUtil {
     fun catchPayload(joinCode: String, playerId: String, catchCode: String): String =
-        "MANHNT|${joinCode.trim().uppercase()}|$playerId|${catchCode.trim()}"
+        CatchQrPayload(joinCode.trim().uppercase(), playerId, catchCode.trim()).encode()
 
     fun encodeToBitmap(content: String, sizePx: Int = 512): Bitmap {
         val hints = mapOf(EncodeHintType.MARGIN to 1)

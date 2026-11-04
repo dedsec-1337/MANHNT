@@ -64,6 +64,12 @@ Do not publish broad rules such as `".read": true` or `".write": true`; they exp
 
 ---
 
+## 📷 Camera (optional QR scanning)
+
+Seekers can tag by scanning the Hider's QR instead of typing the 4-digit code. The camera permission is requested only when the Seeker taps **Scan QR code**, and the app works fully without it. Frames are decoded on-device with ZXing; nothing is stored or uploaded. The QR carries `MANHNT|<joinCode>|<playerId>|<catchCode>` (see `CatchQrPayload`), the same proof as the on-screen code, and every tag is still validated by the host and the Firebase rules. If the permission is denied, the sheet offers **Allow camera** and **Open settings**, and the keypad is always one tap away.
+
+---
+
 ## 🔋 Battery Optimization & Background GPS
 
 Modern Android versions and aggressive OEM operating systems (Xiaomi MIUI/HyperOS, Samsung OneUI, Huawei EMUI, Oppo ColorOS) terminate background apps when the screen is locked to save battery.

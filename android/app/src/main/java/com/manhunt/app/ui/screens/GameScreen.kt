@@ -629,7 +629,7 @@ fun GameScreen(
                                         .align(Alignment.CenterHorizontally)
                                 )
                                 Text(
-                                    text = "Seeker can type the code — QR is local proof",
+                                    text = "Seeker can scan this QR or type the code",
                                     fontSize = 10.sp,
                                     color = AppleTextSecondary,
                                     modifier = Modifier
@@ -768,6 +768,7 @@ fun GameScreen(
             CatchBottomSheet(
                 targetHider = hider,
                 candidates = state.catchableHiders.ifEmpty { listOf(hider) },
+                roomJoinCode = state.session?.joinCode.orEmpty(),
                 onDismiss = { showCatchSheetForHider = null },
                 onSubmitCatchCode = { hiderId, enteredPin ->
                     showCatchSheetForHider = null

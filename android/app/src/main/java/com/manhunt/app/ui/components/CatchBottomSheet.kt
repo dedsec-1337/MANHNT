@@ -3,6 +3,8 @@ package com.manhunt.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -10,11 +12,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.pm.PackageManager
+import com.manhunt.app.R
 import com.manhunt.app.data.model.Player
+import com.manhunt.app.util.CatchQrPayload
 import com.manhunt.app.ui.theme.AppleAccentBlue
 import com.manhunt.app.ui.theme.AppleCardBackground
 import com.manhunt.app.ui.theme.AppleSeekerOrange
@@ -27,6 +34,7 @@ import com.manhunt.app.ui.theme.*
 fun CatchBottomSheet(
     targetHider: Player,
     candidates: List<Player> = listOf(targetHider),
+    roomJoinCode: String,
     onDismiss: () -> Unit,
     onSubmitCatchCode: (hiderId: String, code: String) -> Unit
 ) {
@@ -37,6 +45,31 @@ fun CatchBottomSheet(
     var selectedId by remember(targetHider.id) { mutableStateOf(targetHider.id) }
     val selected = candidates.firstOrNull { it.id == selectedId } ?: targetHider
 
+    // QR scan: optional shortcut for the same proof as typing the code. Hidden on devices without a camera.
+    val context = LocalContext.current
+    val hasCamera = remember {
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)
+    }
+    var scanning by remember { mutableStateOf(false) }
+    val notManhuntMessage = stringResource(R.string.scan_not_manhnt)
+    val wrongRoomMessage = stringResource(R.string.scan_wrong_room)
+    val notCatchableMessage = stringResource(R.string.scan_not_catchable)
+    val onScanned: (CatchQrPayload) -> Unit = { scanned ->
+        when {
+            !scanned.joinCode.equals(roomJoinCode, ignoreCase = true) ->
+                errorMessage = wrongRoomMessage
+            candidates.none { it.id == scanned.playerId } ->
+                errorMessage = notCatchableMessage
+            else -> {
+                selectedId = scanned.playerId
+                code = scanned.catchCode
+                errorMessage = null
+                scanning = false
+                onSubmitCatchCode(scanned.playerId, scanned.catchCode)
+            }
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -46,6 +79,7 @@ fun CatchBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -104,6 +138,51 @@ fun CatchBottomSheet(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            if (scanning) {
+                Text(
+                    text = stringResource(R.string.scan_hint),
+                    fontSize = 14.sp,
+                    color = AppleTextSecondary,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                QrScannerView(
+                    onPayload = onScanned,
+                    onUnrecognized = { errorMessage = notManhuntMessage },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(320.dp)
+                )
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = errorMessage!!,
+                        fontSize = 13.sp,
+                        color = Color(0xFFFF3B30),
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                AppleSecondaryButton(
+                    text = stringResource(R.string.scan_enter_code_instead),
+                    onClick = {
+                        scanning = false
+                        errorMessage = null
+                    }
+                )
+            } else {
+            if (hasCamera) {
+                AppleSecondaryButton(
+                    text = stringResource(R.string.scan_qr_button),
+                    onClick = {
+                        errorMessage = null
+                        scanning = true
+                    }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // Code Display (4 Digit Boxes)
             Row(
@@ -201,6 +280,8 @@ fun CatchBottomSheet(
                     }
                 }
             )
+
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
         }

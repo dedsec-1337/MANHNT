@@ -158,6 +158,13 @@ dependencies {
     // QR (local tag proof)
     implementation("com.google.zxing:core:3.5.3")
 
+    // CameraX (Apache-2.0, AOSP): preview + frame analysis for scanning the Hider's QR.
+    // Decoding is done locally by ZXing core above. 1.3.x matches compileSdk 34.
+    implementation("androidx.camera:camera-core:1.3.3")
+    implementation("androidx.camera:camera-camera2:1.3.3")
+    implementation("androidx.camera:camera-lifecycle:1.3.3")
+    implementation("androidx.camera:camera-view:1.3.3")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

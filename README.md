@@ -84,7 +84,7 @@ Timed map reveals. Face-to-face tags. Optional Bluetooth assist.
 |:--|:-------|:-------|
 | **Map** | Frozen reveal pins + live self | Own GPS + zone |
 | **Clues** | Auto-ping · optional BLE nearby | Compass to nearest seeker |
-| **Tag** | Enter 4-digit code | Show code or QR |
+| **Tag** | Enter 4-digit code or scan QR | Show code or QR |
 | **Win** | Catch everyone | Survive / jailbreak |
 
 ---
@@ -106,7 +106,7 @@ Timed map reveals. Face-to-face tags. Optional Bluetooth assist.
 | Piece | Role |
 |:------|:-----|
 | **4-digit code** | Primary tag proof |
-| **QR** | Same proof on the runner’s screen |
+| **QR** | Same proof on the runner’s screen; Seekers can scan it (camera optional) |
 | **Bluetooth LE** | Optional “nearby” only — never required |
 | **Firebase** | Roster · caught · timer · `FINISHED` · results |
 
@@ -127,7 +127,7 @@ Kotlin · Jetpack Compose · Material 3 · OSMDroid · Fused Location · Room ·
 | **3** | Everyone joins · host assigns Seeker / Runner |
 | **4** | Match starts · head start ends · hunt begins |
 | **5** | Each ping: runner positions snapshot onto the map (frozen until next) |
-| **6** | Tag = enter their **4-digit code** (they can show QR) |
+| **6** | Tag = enter their **4-digit code** (or scan the QR they show) |
 | **7** | Jail (if on): free runners can jailbreak the group |
 | **8** | All caught → seekers · time up with anyone free → runners |
 
