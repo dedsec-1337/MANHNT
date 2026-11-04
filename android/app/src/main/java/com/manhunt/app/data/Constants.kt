@@ -1,7 +1,13 @@
 package com.manhunt.app.data
 
+import com.manhunt.app.BuildConfig
+
 object Constants {
-    const val FIREBASE_DATABASE_URL = "https://manhnt-ba00c-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    /**
+     * Realtime Database base URL, injected at build time (see android/README.md,
+     * "Firebase configuration"). Never hardcode a deployment URL here.
+     */
+    val FIREBASE_DATABASE_URL: String = BuildConfig.FIREBASE_DATABASE_URL
 
     const val LOCATION_UPDATE_INTERVAL_MS = 5000L
     const val FASTEST_LOCATION_INTERVAL_MS = 3000L

@@ -41,16 +41,21 @@
 
 ## 🔥 Firebase Database Setup
 
-MANHNT connects directly to Firebase Realtime Database using its **REST API** (`PUT`, `GET`, `PATCH`, `DELETE`). No native `google-services.json` setup is required!
+MANHNT reads and writes Realtime Database data through its **REST API** (`PUT`, `GET`, `PATCH`, `DELETE`). Firebase **Anonymous Auth** is still required: the app signs in anonymously and attaches the ID token to every REST call (`AuthTokenInterceptor`), so `app/google-services.json` must be present and the Anonymous provider enabled in the Firebase console.
 
-### 1. Database URL Configuration
-The database URL is pre-configured in `app/src/main/java/com/manhunt/app/data/Constants.kt`:
+### 1. Firebase configuration
+The database URL is **not** hardcoded in Kotlin. `app/build.gradle.kts` resolves it at build time and exposes it as `BuildConfig.FIREBASE_DATABASE_URL` (surfaced as `Constants.FIREBASE_DATABASE_URL`). Sources, first match wins:
 
-```kotlin
-object Constants {
-    const val FIREBASE_DATABASE_URL = "https://manhnt-ba00c-default-rtdb.asia-southeast1.firebasedatabase.app/"
-}
-```
+1. `-Pmanhunt.firebaseDatabaseUrl=https://...` on the Gradle command line
+2. Environment variable `MANHUNT_FIREBASE_DATABASE_URL`
+3. `manhunt.firebaseDatabaseUrl` in `android/local.properties` (git-ignored; see `local.properties.example`)
+4. `project_info.firebase_url` from `app/google-services.json`
+
+If none resolve, the build fails with a message saying so. The value must be an `https://` URL; a trailing `/` is added if missing.
+
+Notes:
+- `google-services.json` is still tracked in this repository, together with its (restricted-by-design, but public) Android API key. To run your own backend, replace that file with yours. To keep it out of git entirely, untrack it and generate it in CI from a secret.
+- Restrict the API key in Google Cloud Console to this app's package name and signing certificate.
 
 ### 2. Realtime Database Security Rules
 Use the restricted, validated rules in [`firebase/database.rules.example.json`](../firebase/database.rules.example.json) as the version-controlled source. The rules deny reads and writes by default; authenticated users can read the minimal `joinInfo` record for room lookup, while session, location, and gameplay data use narrower membership or role checks.

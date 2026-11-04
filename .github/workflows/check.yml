@@ -136,6 +136,31 @@ jobs:
             exit "$status"
           fi
 
+      - name: Unit tests (must pass)
+        working-directory: android
+        run: gradle --no-daemon :app:testDebugUnitTest
+
+      - name: Release build with R8 minify + resource shrinking
+        working-directory: android
+        run: gradle --no-daemon :app:assembleRelease
+
+      - name: Android lint (report only until a baseline is committed)
+        working-directory: android
+        continue-on-error: true
+        run: gradle --no-daemon :app:lintDebug
+
+      - name: Upload test, lint and R8 mapping reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-reports
+          if-no-files-found: ignore
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/test-results/
+            android/app/build/reports/lint-results-debug.html
+            android/app/build/outputs/mapping/release/mapping.txt
+
   firebase-rules-tests:
     name: Firebase Realtime Database rules tests
     runs-on: ubuntu-latest

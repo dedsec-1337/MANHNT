@@ -1,0 +1,7 @@
+## Copy to android/local.properties (git-ignored) and adjust.
+sdk.dir=/path/to/Android/Sdk
+
+## Optional: Firebase Realtime Database URL. If omitted, the build reads it from
+## app/google-services.json (firebase_url). Env var MANHUNT_FIREBASE_DATABASE_URL and
+## -Pmanhunt.firebaseDatabaseUrl=... also work and take precedence over the file.
+# manhunt.firebaseDatabaseUrl=https://YOUR-PROJECT-default-rtdb.REGION.firebasedatabase.app/

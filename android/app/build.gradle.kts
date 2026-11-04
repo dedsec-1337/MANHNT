@@ -1,8 +1,49 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("com.google.gms.google-services")
+}
+
+// ---- Build-time configuration: no deployment URLs or secrets hardcoded in Kotlin sources ----
+val manhuntLocalProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+/** Resolution order: -P<key>, environment variable, android/local.properties. */
+fun manhuntConfig(key: String, envKey: String): String? =
+    (project.providers.gradleProperty(key).orNull
+        ?: System.getenv(envKey)
+        ?: manhuntLocalProps.getProperty(key))
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+/** Last-resort source: the RTDB URL Firebase itself writes into google-services.json. */
+fun manhuntUrlFromGoogleServices(): String? {
+    val file = project.file("google-services.json")
+    if (!file.exists()) return null
+    val parsed = groovy.json.JsonSlurper().parse(file) as? Map<*, *> ?: return null
+    return ((parsed["project_info"] as? Map<*, *>)?.get("firebase_url") as? String)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+}
+
+val manhuntDatabaseUrl: String = run {
+    val configured = manhuntConfig("manhunt.firebaseDatabaseUrl", "MANHUNT_FIREBASE_DATABASE_URL")
+        ?: manhuntUrlFromGoogleServices()
+        ?: throw GradleException(
+            "Firebase Realtime Database URL is not configured. Set manhunt.firebaseDatabaseUrl in " +
+                "android/local.properties, export MANHUNT_FIREBASE_DATABASE_URL, or add " +
+                "app/google-services.json. See android/README.md."
+        )
+    require(Regex("^https://[A-Za-z0-9.-]+/?\$").matches(configured)) {
+        "manhunt.firebaseDatabaseUrl must look like https://<db>.firebaseio.com/ " +
+            "or https://<db>-default-rtdb.<region>.firebasedatabase.app/ (got: $configured)"
+    }
+    if (configured.endsWith("/")) configured else "$configured/"
 }
 
 android {
@@ -16,6 +57,8 @@ android {
         versionCode = 2
         versionName = "1.2.0"
 
+        buildConfigField("String", "FIREBASE_DATABASE_URL", "\"$manhuntDatabaseUrl\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -24,7 +67,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -43,6 +87,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
